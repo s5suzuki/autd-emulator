@@ -4,7 +4,7 @@
  * Created Date: 29/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 29/04/2020
+ * Last Modified: 30/04/2020
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -16,7 +16,7 @@ use std::sync::mpsc::Sender;
 use std::sync::{Arc, RwLock};
 use std::{thread, thread::JoinHandle};
 
-const BUF_SIZE: usize = 1024;
+const BUF_SIZE: usize = 65536;
 
 macro_rules! if_not_open_or_cannot_read {
     ($is_open:expr, $cnt:stmt) => {
@@ -61,7 +61,6 @@ impl Interface {
         let mut buf = [0; BUF_SIZE];
         let th_handle = thread::spawn(move || loop {
             if_not_open_or_cannot_read!(is_open, break);
-
             match socket.recv_from(&mut buf) {
                 Ok((amt, _src)) => {
                     let rx_buf = &mut buf[..amt];

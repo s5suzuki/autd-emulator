@@ -72,9 +72,9 @@ fn main() {
                             for trans in transducers {
                                 update_handler.sources.borrow_mut().push(trans);
                             }
-                            update_handler.update_source_pos();
-                            update_handler.update_source_phase();
                         }
+                        update_handler.update_source_pos();
+                        update_handler.update_source_phase();
                     }
                     AUTDData::Gain(gain) => {
                         for (&phase, source) in gain
@@ -84,6 +84,11 @@ fn main() {
                         {
                             source.phase = 2.0 * PI * (1.0 - (phase as f32 / 255.0));
                         }
+                        update_handler.update_source_phase();
+                    }
+                    AUTDData::Clear => {
+                        update_handler.sources.borrow_mut().clear();
+                        update_handler.update_source_pos();
                         update_handler.update_source_phase();
                     }
                     _ => (),

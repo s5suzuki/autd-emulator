@@ -4,7 +4,7 @@
  * Created Date: 29/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 29/04/2020
+ * Last Modified: 30/04/2020
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -40,11 +40,14 @@ pub enum AUTDData {
     Modulation(Modulation),
     Gain(Gain),
     Geometries(Vec<Geometry>),
+    Clear,
 }
 
 pub fn parse(raw_buf: Vec<u8>) -> Vec<AUTDData> {
     let mut res = Vec::new();
-    if is_geometry(&raw_buf) {
+    if is_clear(&raw_buf) {
+        res.push(AUTDData::Clear);
+    } else if is_geometry(&raw_buf) {
         let geo = parse_as_geometry(&raw_buf[4..]);
         res.push(AUTDData::Geometries(geo));
     } else if is_header(&raw_buf) {
@@ -58,6 +61,10 @@ pub fn parse(raw_buf: Vec<u8>) -> Vec<AUTDData> {
     }
 
     res
+}
+
+pub fn is_clear(buf: &[u8]) -> bool {
+    buf[0] == 0x00
 }
 
 pub fn is_geometry(buf: &[u8]) -> bool {
