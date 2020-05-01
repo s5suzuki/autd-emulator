@@ -2,8 +2,8 @@
 # It is not intended for manual editing.
 [[package]]
 name = "acoustic_field_viewer"
-version = "0.0.3"
-source = "git+https://github.com/sssssssuzuki/acoustic_field_viewer.git#7244ca6d6ba260625b4ceab6a0763774a4574f0a"
+version = "0.0.4"
+source = "git+https://github.com/sssssssuzuki/acoustic_field_viewer.git?rev=dev#1b9d13eddf08f4df923740ee3f0da394f5c8a582"
 dependencies = [
  "camera_controllers",
  "conrod",
@@ -84,6 +84,13 @@ name = "autd-emulator"
 version = "0.1.0"
 dependencies = [
  "acoustic_field_viewer",
+ "camera_controllers",
+ "conrod",
+ "conrod_core",
+ "conrod_piston",
+ "find_folder",
+ "piston_window",
+ "quaternion",
  "scarlet",
  "vecmath 1.0.0",
 ]

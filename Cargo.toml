@@ -7,6 +7,13 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-acoustic_field_viewer = {git = "https://github.com/sssssssuzuki/acoustic_field_viewer.git", version="0.0.3"}
+acoustic_field_viewer = {git = "https://github.com/sssssssuzuki/acoustic_field_viewer.git", rev="dev", version="0.0.4"}
 scarlet = "1.1.0"
 vecmath = "1.0.0"
+piston_window = "0.89.0"
+conrod = "0.61.1"
+conrod_core = "0.69.0"
+conrod_piston = "0.69.0"
+find_folder = "0.3.0"
+camera_controllers = "0.31.0"
+quaternion = "0.4.1"
