@@ -64,7 +64,10 @@ pub fn theme() -> conrod_core::Theme {
 
 widget_ids! {
     pub struct Ids {
+        tabs,
+        canvas_main,
         canvas,
+        canvas2,
         title,
         button,
         xy_pad,
@@ -80,7 +83,17 @@ pub fn gui(ui: &mut conrod_core::UiCell, ids: &Ids, app: &mut DemoApp) {
     widget::Canvas::new()
         .pad(MARGIN)
         .scroll_kids_vertically()
-        .set(ids.canvas, ui);
+        .set(ids.canvas_main, ui);
+
+    widget::tabs::Tabs::new(&[(ids.canvas, "main"), (ids.canvas2, "sub")])
+        .layout_horizontally()
+        .w_h(200., 200.)
+        .label_color(conrod_core::color::WHITE)
+        .color(conrod_core::color::WHITE)
+        .label_font_size(10)
+        .starting_tab_idx(0)
+        .middle_of(ids.canvas_main)
+        .set(ids.tabs, ui);
 
     for _press in widget::Button::new()
         .label("PRESS ME")
@@ -98,6 +111,7 @@ pub fn gui(ui: &mut conrod_core::UiCell, ids: &Ids, app: &mut DemoApp) {
     widget::Circle::fill(10.0)
         .color(conrod_core::color::rgba(1., 1., 1., 1.))
         .x_y_relative_to(ids.xy_pad, ball_x, ball_y)
+        .mid_top_of(ids.canvas2)
         .set(ids.ball, ui);
 
     let ball_x_range = 1.0;
@@ -120,9 +134,7 @@ pub fn gui(ui: &mut conrod_core::UiCell, ids: &Ids, app: &mut DemoApp) {
     .line_thickness(0.)
     .value_font_size(0)
     .w_h(100., 100.)
-    .down_from(ids.button, 60.)
-    .align_middle_x_of(ids.canvas)
-    .parent(ids.canvas)
+    .mid_top_of(ids.canvas2)
     .set(ids.xy_pad, ui)
     {
         app.caemra_xy = [x, y];
