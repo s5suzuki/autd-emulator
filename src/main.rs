@@ -5,11 +5,9 @@ mod autd_event_handler;
 mod camera_helper;
 mod color;
 mod consts;
-mod custom;
 mod interface;
 mod parser;
-mod ui_command;
-mod ui_view;
+mod ui;
 mod viewer_controller;
 
 use std::sync::mpsc;
@@ -53,7 +51,7 @@ fn main() {
         viewer_controller.update(update_handler, button);
     };
 
-    let h = std::thread::spawn(move || ui_view::window_2d(tx_ui_command));
+    let h = std::thread::spawn(move || ui::window_2d(tx_ui_command));
 
     window.update = Some(update);
     window.start();

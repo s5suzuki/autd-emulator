@@ -11,10 +11,10 @@
  *
  */
 
-use acoustic_field_viewer::vec_utils::Vector3;
+use vecmath::Vector3;
 
 pub enum UICommand {
-    CameraMove(Vector3),
-    CameraRotate(Vector3),
-    CameraSetPosture(Vector3, Vector3),
+    CameraMove(Vector3<f64>),
+    CameraRotate(Vector3<f64>),
+    CameraSetPosture(Vector3<f64>, Vector3<f64>),
 }

@@ -93,6 +93,7 @@ dependencies = [
  "quaternion",
  "scarlet",
  "vecmath 1.0.0",
+ "vecmath_utils",
 ]
 
 [[package]]
@@ -779,7 +780,7 @@ version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5cc7ad3d82c845bdb5dde34ffdcc7a5fb4d2996e1e1ee0f19c33bc80e15196b9"
 dependencies = [
- "num-traits 0.2.11",
+ "num-traits 0.1.43",
 ]
 
 [[package]]
@@ -2021,6 +2022,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "956ae1e0d85bca567dee1dcf87fb1ca2e792792f66f87dced8381f99cd91156a"
 dependencies = [
  "piston-float 1.0.0",
+]
+
+[[package]]
+name = "vecmath_utils"
+version = "0.0.4"
+source = "git+https://github.com/sssssssuzuki/vecmath_utils.git#b014accd76734d3a9f2335773f3ba5e4ca48c4e4"
+dependencies = [
+ "num 0.2.1",
+ "quaternion",
+ "vecmath 1.0.0",
 ]
 
 [[package]]

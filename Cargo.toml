@@ -17,3 +17,4 @@ conrod_piston = "0.69.0"
 find_folder = "0.3.0"
 camera_controllers = "0.31.0"
 quaternion = "0.4.1"
+vecmath_utils = {git = "https://github.com/sssssssuzuki/vecmath_utils.git", version="0.0.4"}

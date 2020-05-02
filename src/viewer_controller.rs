@@ -13,12 +13,11 @@
 
 use acoustic_field_viewer::vec_utils::Vector3;
 use acoustic_field_viewer::view::event::*;
-use acoustic_field_viewer::view::{
-    AcousticFiledSliceViewer, SoundSourceViewer, UpdateHandler, ViewWindow, ViewerSettings,
-};
+use acoustic_field_viewer::view::UpdateHandler;
+use vecmath_utils::*;
 
 use crate::camera_helper;
-use crate::ui_command::UICommand;
+use crate::ui::UICommand;
 
 use std::sync::mpsc::Receiver;
 
@@ -45,9 +44,11 @@ impl ViewController {
 
         if let Ok(d) = self.rx_ui_command.try_recv() {
             match d {
-                UICommand::CameraMove(t) => Self::camera_move(update_handler, t),
-                UICommand::CameraRotate(t) => Self::camera_rotate(update_handler, t),
-                UICommand::CameraSetPosture(f, u) => Self::camera_set_posture(update_handler, f, u),
+                UICommand::CameraMove(t) => Self::camera_move(update_handler, vec3_cast(t)),
+                UICommand::CameraRotate(t) => Self::camera_rotate(update_handler, vec3_cast(t)),
+                UICommand::CameraSetPosture(f, u) => {
+                    Self::camera_set_posture(update_handler, vec3_cast(f), vec3_cast(u))
+                }
             }
         }
     }
