@@ -15,6 +15,8 @@ use vecmath::Vector3;
 
 pub enum UICommand {
     CameraMove(Vector3<f64>),
+    CameraMoveTo(Vector3<f32>),
     CameraRotate(Vector3<f64>),
     CameraSetPosture(Vector3<f64>, Vector3<f64>),
+    CameraPos(Vector3<f32>),
 }

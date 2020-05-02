@@ -18,7 +18,7 @@ use piston_window::*;
 use piston_window::{G2d, G2dTexture, TextureSettings};
 use piston_window::{PistonWindow, UpdateEvent, Window, WindowSettings};
 
-use std::sync::mpsc;
+use std::sync::mpsc::{Receiver, Sender};
 
 use crate::color;
 use crate::ui::CameraControlTab;
@@ -93,7 +93,7 @@ pub fn gui(ui: &mut conrod_core::UiCell, ids: &Ids, app: &mut App) {
     }
 }
 
-pub fn window_2d(tx_command: mpsc::Sender<UICommand>) {
+pub fn window_2d(from_cnt: Receiver<UICommand>, to_cnt: Sender<UICommand>) {
     const WIDTH: u32 = WIN_W;
     const HEIGHT: u32 = WIN_H;
 
@@ -137,7 +137,7 @@ pub fn window_2d(tx_command: mpsc::Sender<UICommand>) {
     let ids = Ids::new(ui.widget_id_generator());
 
     let image_map = conrod_core::image::Map::new();
-    let camera_tab = CameraControlTab::new(tx_command, &mut ui);
+    let camera_tab = CameraControlTab::new(from_cnt, to_cnt, &mut ui);
     let mut app = App::new(camera_tab);
 
     while let Some(event) = window.next() {

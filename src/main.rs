@@ -40,18 +40,19 @@ fn main() {
     let mut acoustic_field_viewer = AcousticFiledSliceViewer::new();
     acoustic_field_viewer.translate([TRANS_SIZE * 8.5, TRANS_SIZE * 6.5, 150.]);
 
-    let (tx_ui_command, rx_ui_command) = mpsc::channel();
+    let (from_ui, to_cnt) = mpsc::channel();
+    let (from_cnt, to_ui) = mpsc::channel();
 
     let mut window = ViewWindow::new(vec![], source_viewer, acoustic_field_viewer, settings);
 
     let autd_event_handler = AUTDEventHandler::new(rx_autd_event);
-    let viewer_controller = ViewController::new(rx_ui_command);
+    let mut viewer_controller = ViewController::new(to_cnt, from_cnt);
     let update = |update_handler: &mut UpdateHandler, button: Option<Button>| {
         autd_event_handler.update(update_handler);
         viewer_controller.update(update_handler, button);
     };
 
-    let h = std::thread::spawn(move || ui::window_2d(tx_ui_command));
+    let h = std::thread::spawn(move || ui::window_2d(to_ui, from_ui));
 
     window.update = Some(update);
     window.start();

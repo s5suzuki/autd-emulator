@@ -20,7 +20,7 @@ use crate::color;
 use crate::ui::ui_view::{MARGIN, WIN_W};
 use crate::ui::UICommand;
 
-use std::sync::mpsc;
+use std::sync::mpsc::{Receiver, Sender};
 
 const CONTROL_PAD_SIZE: f64 = 100.0;
 const CONTROL_GRIP_SIZE: f64 = 10.0;
@@ -33,6 +33,8 @@ widget_ids! {
         xy_grip,
         z_pad,
         z_grip,
+        label_move_speed,
+        move_speed,
         position_label[],
         position_textbox[],
         sep,
@@ -46,28 +48,39 @@ widget_ids! {
 }
 
 pub struct CameraControlTab {
+    camera_pos: Vector3,
     camera_move_xy: [f64; 2],
     camera_move_z: f64,
+    camera_move_speed: f64,
     camera_rot_pitch_yaw: [f64; 2],
     camera_rot_roll: f64,
     release_mouse_left: bool,
-    tx_command: mpsc::Sender<UICommand>,
+    from_cnt: Receiver<UICommand>,
+    to_cnt: Sender<UICommand>,
     ids: Ids,
 }
 
 impl CameraControlTab {
-    pub fn new(tx_command: mpsc::Sender<UICommand>, ui: &mut conrod_core::Ui) -> Self {
+    pub fn new(
+        from_cnt: Receiver<UICommand>,
+        to_cnt: Sender<UICommand>,
+        ui: &mut conrod_core::Ui,
+    ) -> Self {
         let mut ids = Ids::new(ui.widget_id_generator());
         ids.position_textbox
             .resize(3, &mut ui.widget_id_generator());
+        ids.position_label.resize(3, &mut ui.widget_id_generator());
 
         CameraControlTab {
+            camera_pos: [0., 0., 0.],
             camera_move_xy: vec2_zero(),
             camera_move_z: 0.,
+            camera_move_speed: 10.,
             camera_rot_pitch_yaw: vec2_zero(),
             camera_rot_roll: 0.,
             release_mouse_left: false,
-            tx_command,
+            from_cnt,
+            to_cnt,
             ids,
         }
     }
@@ -151,33 +164,86 @@ impl CameraControlTab {
             self.camera_move_xy = [x, y];
         }
 
+        widget::Text::new("X: ")
+            .h(24.)
+            .down_from(ids.position_title, 5.)
+            .right_from(ids.z_pad, CONTROL_PAD_SIZE + MARGIN)
+            .set(ids.position_label[0], ui);
+        widget::Text::new("Y: ")
+            .h(24.)
+            .down_from(ids.position_label[0], 5.)
+            .right_from(ids.z_pad, CONTROL_PAD_SIZE + MARGIN)
+            .set(ids.position_label[1], ui);
+        widget::Text::new("Z: ")
+            .h(24.)
+            .down_from(ids.position_label[1], 5.)
+            .right_from(ids.z_pad, CONTROL_PAD_SIZE + MARGIN)
+            .set(ids.position_label[2], ui);
+        for i in 0..3 {
+            for txt in widget::TextBox::new(&self.camera_pos[i].to_string())
+                .w_h(120., 24.)
+                .right_from(ids.position_label[i], 0.)
+                .align_middle_y_of(ids.position_label[i])
+                .set(ids.position_textbox[i], ui)
+            {
+                match txt {
+                    widget::text_box::Event::Update(s) => {
+                        if let Ok(f) = s.parse() {
+                            self.camera_pos[i] = f;
+                            self.to_cnt
+                                .send(UICommand::CameraMoveTo(self.camera_pos))
+                                .unwrap()
+                        }
+                    }
+                    _ => (),
+                }
+            }
+        }
+
+        widget::Text::new("Speed: ")
+            .h(24.)
+            .down_from(ids.xy_pad, MARGIN)
+            .align_left_of(ids.canvas)
+            .set(ids.label_move_speed, ui);
+
+        for txt in widget::TextBox::new(&self.camera_move_speed.to_string())
+            .w_h(80., 24.)
+            .align_middle_y_of(ids.label_move_speed)
+            .right_from(ids.label_move_speed, 0.)
+            .left_justify()
+            .set(ids.move_speed, ui)
+        {
+            match txt {
+                widget::text_box::Event::Update(s) => {
+                    if let Ok(f) = s.parse() {
+                        self.camera_move_speed = f
+                    }
+                }
+                _ => (),
+            }
+        }
+
+        widget::Rectangle::fill_with([WIN_W as f64 - MARGIN * 2.0, 2.], color::GRAY)
+            .align_left_of(ids.canvas)
+            .down_from(ids.label_move_speed, MARGIN)
+            .set(ids.sep, ui);
+
         if self.release_mouse_left {
             self.camera_move_xy = vec2_zero();
             self.camera_move_z = 0.;
         }
         if !vec2_is_zero(self.camera_move_xy) || self.camera_move_z != 0.0 {
-            self.tx_command
-                .send(UICommand::CameraMove(to_vec3(
-                    self.camera_move_xy,
-                    -self.camera_move_z,
-                )))
-                .unwrap();
+            let t = vec3_scale(
+                to_vec3(self.camera_move_xy, -self.camera_move_z),
+                self.camera_move_speed,
+            );
+            self.to_cnt.send(UICommand::CameraMove(t)).unwrap();
         }
 
-        widget::Rectangle::fill_with([WIN_W as f64 - MARGIN * 2.0, 2.], color::WHITE)
-            .align_left_of(ids.canvas)
-            .down_from(ids.xy_pad, MARGIN)
-            .set(ids.sep, ui);
-
-        for a in widget::TextBox::new("0.000")
-            .w_h(80., 60.)
-            .right_from(ids.z_pad, MARGIN)
-            .down_from(ids.position_title, MARGIN)
-            .set(ids.position_textbox[0], ui)
-        {
-            match a {
-                widget::text_box::Event::Update(s) => println!("{}", s),
-                _Enter => println!("ENTER"),
+        if let Ok(d) = self.from_cnt.try_recv() {
+            match d {
+                UICommand::CameraPos(p) => self.camera_pos = p,
+                _ => (),
             }
         }
     }
@@ -246,7 +312,7 @@ impl CameraControlTab {
             self.camera_rot_roll = 0.;
         }
         if !vec2_is_zero(self.camera_rot_pitch_yaw) || self.camera_rot_roll != 0.0 {
-            self.tx_command
+            self.to_cnt
                 .send(UICommand::CameraRotate([
                     self.camera_rot_pitch_yaw[1],
                     self.camera_rot_roll,
@@ -260,7 +326,7 @@ impl CameraControlTab {
             .w_h(80.0, 60.)
             .set(ids.xy_button, ui)
         {
-            self.tx_command
+            self.to_cnt
                 .send(UICommand::CameraSetPosture([0., -1., 0.], [0., 0., 1.]))
                 .unwrap();
         }

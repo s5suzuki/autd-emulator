@@ -4,7 +4,7 @@
  * Created Date: 01/05/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 01/05/2020
+ * Last Modified: 02/05/2020
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -20,6 +20,10 @@ type Matrix4 = vecmath::Matrix4<f32>;
 pub fn camera_move(camera: &mut Camera, t: Vector3) {
     camera.position = vecmath::vec3_add(camera.position, mat4_mul_vec3(camera.orthogonal(), t));
     // camera.position = vecmath::vec3_add(camera.position, t);
+}
+
+pub fn camera_move_to(camera: &mut Camera, t: Vector3) {
+    camera.position = t;
 }
 
 pub fn camera_rotate(camera: &mut Camera, axis: Vector3, theta: f32) {
