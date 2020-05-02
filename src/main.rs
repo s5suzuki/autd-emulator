@@ -3,7 +3,9 @@ extern crate conrod_core;
 
 mod autd_event_handler;
 mod camera_helper;
+mod color;
 mod consts;
+mod custom;
 mod interface;
 mod parser;
 mod ui_command;
