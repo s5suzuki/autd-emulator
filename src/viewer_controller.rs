@@ -53,10 +53,9 @@ impl ViewController {
                 UICommand::CameraMove(t) => Self::camera_move(update_handler, vec3::cast(t)),
                 UICommand::CameraMoveTo(t) => Self::camera_move_to(update_handler, t),
                 UICommand::CameraRotate(t) => Self::camera_rotate(update_handler, vec3::cast(t)),
-                UICommand::CameraSetPosture(f, u) => {
-                    Self::camera_set_posture(update_handler, vec3::cast(f), vec3::cast(u))
-                }
-                UICommand::SliceMoveTo(t) => Self::slice_move_to(update_handler, t),
+                UICommand::CameraSetPosture(f, u) => Self::camera_set_posture(update_handler, f, u),
+                UICommand::SliceMove(t) => Self::slice_move(update_handler, t),
+                UICommand::CameraUpdate => self.is_init = true,
                 _ => (),
             }
         }
@@ -68,6 +67,13 @@ impl ViewController {
             self.to_ui
                 .send(UICommand::SlicePos(
                     update_handler.field_slice_viewer.position(),
+                ))
+                .unwrap();
+            self.to_ui
+                .send(UICommand::SlicePosture(
+                    update_handler.field_slice_viewer.right(),
+                    update_handler.field_slice_viewer.up(),
+                    update_handler.field_slice_viewer.forward(),
                 ))
                 .unwrap();
             self.is_init = false;
@@ -99,6 +105,11 @@ impl ViewController {
     pub fn slice_move_to(update_handler: &mut UpdateHandler, t: Vector3) {
         let d = vec3::sub(update_handler.field_slice_viewer.position(), t);
         update_handler.field_slice_viewer.translate(d);
+        update_handler.update_position();
+    }
+
+    pub fn slice_move(update_handler: &mut UpdateHandler, t: Vector3) {
+        update_handler.field_slice_viewer.translate(t);
         update_handler.update_position();
     }
 }

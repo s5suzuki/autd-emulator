@@ -179,6 +179,7 @@ pub fn window_2d(from_cnt: Receiver<UICommand>, to_cnt: Sender<UICommand>) {
                 match d {
                     UICommand::CameraPos(p) => app.camera_tab.set_camera_pos(p),
                     UICommand::SlicePos(p) => app.slice_tab.set_pos(p),
+                    UICommand::SlicePosture(r, u, f) => app.slice_tab.set_posture(r, u, f),
                     _ => (),
                 }
             }

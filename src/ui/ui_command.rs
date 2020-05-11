@@ -17,9 +17,12 @@ pub enum UICommand {
     CameraMove(Vector3<f64>),
     CameraMoveTo(Vector3<f32>),
     CameraRotate(Vector3<f64>),
-    CameraSetPosture(Vector3<f64>, Vector3<f64>),
+    CameraSetPosture(Vector3<f32>, Vector3<f32>),
     CameraPos(Vector3<f32>),
+    CameraUpdate,
 
+    SliceMove(Vector3<f32>),
     SliceMoveTo(Vector3<f32>),
     SlicePos(Vector3<f32>),
+    SlicePosture(Vector3<f32>, Vector3<f32>, Vector3<f32>),
 }
