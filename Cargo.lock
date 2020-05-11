@@ -2,8 +2,8 @@
 # It is not intended for manual editing.
 [[package]]
 name = "acoustic_field_viewer"
-version = "0.0.5"
-source = "git+https://github.com/sssssssuzuki/acoustic_field_viewer.git?rev=dev#7dda45bc5417fba098e274d0ad729f32afb65e4d"
+version = "0.0.7"
+source = "git+https://github.com/sssssssuzuki/acoustic_field_viewer.git?rev=dev#ac6d0e145ef5e8395b5fc1f6a42c8cffeac49b95"
 dependencies = [
  "camera_controllers",
  "conrod",
@@ -17,7 +17,7 @@ dependencies = [
  "rand 0.7.3",
  "scarlet",
  "shader_version",
- "vecmath 1.0.0",
+ "vecmath_utils",
 ]
 
 [[package]]
@@ -2026,8 +2026,8 @@ dependencies = [
 
 [[package]]
 name = "vecmath_utils"
-version = "0.0.4"
-source = "git+https://github.com/sssssssuzuki/vecmath_utils.git#b014accd76734d3a9f2335773f3ba5e4ca48c4e4"
+version = "0.0.12"
+source = "git+https://github.com/sssssssuzuki/vecmath_utils.git#918585e845fb986cdf33779655d38f3ccef0946a"
 dependencies = [
  "num 0.2.1",
  "quaternion",

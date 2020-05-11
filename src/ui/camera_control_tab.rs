@@ -4,23 +4,24 @@
  * Created Date: 02/05/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 02/05/2020
+ * Last Modified: 11/05/2020
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
  *
  */
 
-use vecmath_utils::*;
-
 use conrod_core::Colorable;
 use conrod_core::{widget, Labelable, Positionable, Sizeable, Widget};
+use vecmath_utils::Vector2;
+use vecmath_utils::{vec2, vec3};
 
 use crate::color;
 use crate::ui::ui_view::{MARGIN, WIN_W};
 use crate::ui::UICommand;
+use crate::Vector3;
 
-use std::sync::mpsc::{Receiver, Sender};
+use std::sync::mpsc::Sender;
 
 const CONTROL_PAD_SIZE: f64 = 100.0;
 const CONTROL_GRIP_SIZE: f64 = 10.0;
@@ -49,23 +50,18 @@ widget_ids! {
 
 pub struct CameraControlTab {
     camera_pos: Vector3,
-    camera_move_xy: [f64; 2],
+    camera_move_xy: Vector2<f64>,
     camera_move_z: f64,
     camera_move_speed: f64,
-    camera_rot_pitch_yaw: [f64; 2],
+    camera_rot_pitch_yaw: Vector2<f64>,
     camera_rot_roll: f64,
     release_mouse_left: bool,
-    from_cnt: Receiver<UICommand>,
     to_cnt: Sender<UICommand>,
     ids: Ids,
 }
 
 impl CameraControlTab {
-    pub fn new(
-        from_cnt: Receiver<UICommand>,
-        to_cnt: Sender<UICommand>,
-        ui: &mut conrod_core::Ui,
-    ) -> Self {
+    pub fn new(to_cnt: Sender<UICommand>, ui: &mut conrod_core::Ui) -> Self {
         let mut ids = Ids::new(ui.widget_id_generator());
         ids.position_textbox
             .resize(3, &mut ui.widget_id_generator());
@@ -73,13 +69,12 @@ impl CameraControlTab {
 
         CameraControlTab {
             camera_pos: [0., 0., 0.],
-            camera_move_xy: vec2_zero(),
+            camera_move_xy: vec2::zero(),
             camera_move_z: 0.,
             camera_move_speed: 10.,
-            camera_rot_pitch_yaw: vec2_zero(),
+            camera_rot_pitch_yaw: vec2::zero(),
             camera_rot_roll: 0.,
             release_mouse_left: false,
-            from_cnt,
             to_cnt,
             ids,
         }
@@ -229,23 +224,21 @@ impl CameraControlTab {
             .set(ids.sep, ui);
 
         if self.release_mouse_left {
-            self.camera_move_xy = vec2_zero();
+            self.camera_move_xy = vec2::zero();
             self.camera_move_z = 0.;
         }
-        if !vec2_is_zero(self.camera_move_xy) || self.camera_move_z != 0.0 {
-            let t = vec3_scale(
-                to_vec3(self.camera_move_xy, -self.camera_move_z),
+        if !vec2::is_zero(self.camera_move_xy) || self.camera_move_z != 0.0 {
+            let t = vec3::mul(
+                vec2::to_vec3(self.camera_move_xy, -self.camera_move_z),
                 self.camera_move_speed,
             );
             self.to_cnt.send(UICommand::CameraMove(t)).unwrap();
+            self.camera_pos = vec3::add(self.camera_pos, vec3::cast(t));
         }
+    }
 
-        if let Ok(d) = self.from_cnt.try_recv() {
-            match d {
-                UICommand::CameraPos(p) => self.camera_pos = p,
-                _ => (),
-            }
-        }
+    pub fn set_camera_pos(&mut self, p: Vector3) {
+        self.camera_pos = p;
     }
 
     fn camera_rotation_gui(&mut self, ui: &mut conrod_core::UiCell) {
@@ -308,10 +301,10 @@ impl CameraControlTab {
             self.camera_rot_pitch_yaw = [x, y];
         }
         if self.release_mouse_left {
-            self.camera_rot_pitch_yaw = vec2_zero();
+            self.camera_rot_pitch_yaw = vec2::zero();
             self.camera_rot_roll = 0.;
         }
-        if !vec2_is_zero(self.camera_rot_pitch_yaw) || self.camera_rot_roll != 0.0 {
+        if !vec2::is_zero(self.camera_rot_pitch_yaw) || self.camera_rot_roll != 0.0 {
             self.to_cnt
                 .send(UICommand::CameraRotate([
                     self.camera_rot_pitch_yaw[1],

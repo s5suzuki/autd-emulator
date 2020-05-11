@@ -4,7 +4,7 @@
  * Created Date: 01/05/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 02/05/2020
+ * Last Modified: 11/05/2020
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -19,4 +19,7 @@ pub enum UICommand {
     CameraRotate(Vector3<f64>),
     CameraSetPosture(Vector3<f64>, Vector3<f64>),
     CameraPos(Vector3<f32>),
+
+    SliceMoveTo(Vector3<f32>),
+    SlicePos(Vector3<f32>),
 }
