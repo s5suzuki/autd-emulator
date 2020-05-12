@@ -23,7 +23,7 @@ use crate::consts::TRANS_SIZE;
 use crate::viewer_controller::ViewController;
 
 type Vector3 = vecmath_utils::Vector3<f32>;
-type Vector4 = vecmath_utils::Vector4<f32>;
+// type Vector4 = vecmath_utils::Vector4<f32>;
 type Matrix4 = vecmath_utils::Matrix4<f32>;
 
 fn main() {

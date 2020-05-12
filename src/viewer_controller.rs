@@ -4,7 +4,7 @@
  * Created Date: 01/05/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 11/05/2020
+ * Last Modified: 12/05/2020
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -14,7 +14,7 @@
 use crate::Vector3;
 use acoustic_field_viewer::view::event::*;
 use acoustic_field_viewer::view::UpdateHandler;
-use vecmath_utils::*;
+use vecmath_utils::vec3;
 
 use crate::camera_helper;
 use crate::ui::UICommand;
@@ -52,10 +52,16 @@ impl ViewController {
             match d {
                 UICommand::CameraMove(t) => Self::camera_move(update_handler, vec3::cast(t)),
                 UICommand::CameraMoveTo(t) => Self::camera_move_to(update_handler, t),
-                UICommand::CameraRotate(t) => Self::camera_rotate(update_handler, vec3::cast(t)),
-                UICommand::CameraSetPosture(f, u) => Self::camera_set_posture(update_handler, f, u),
+                UICommand::CameraRotate(t) => Self::camera_rotate(update_handler, t),
+                UICommand::CameraSetPosture { right, up } => {
+                    Self::camera_set_posture(update_handler, right, up)
+                }
                 UICommand::SliceMove(t) => Self::slice_move(update_handler, t),
                 UICommand::CameraUpdate => self.is_init = true,
+                UICommand::SliceRotate(t) => Self::slice_rotate(update_handler, t),
+                UICommand::SliceSetPosture { right, up } => {
+                    Self::slice_set_posture(update_handler, right, up)
+                }
                 _ => (),
             }
         }
@@ -70,11 +76,16 @@ impl ViewController {
                 ))
                 .unwrap();
             self.to_ui
-                .send(UICommand::SlicePosture(
-                    update_handler.field_slice_viewer.right(),
-                    update_handler.field_slice_viewer.up(),
-                    update_handler.field_slice_viewer.forward(),
-                ))
+                .send(UICommand::SliceSetPosture {
+                    right: update_handler.field_slice_viewer.right(),
+                    up: update_handler.field_slice_viewer.up(),
+                })
+                .unwrap();
+            self.to_ui
+                .send(UICommand::CameraSetPosture {
+                    right: update_handler.camera.right,
+                    up: update_handler.camera.up,
+                })
                 .unwrap();
             self.is_init = false;
         }
@@ -82,34 +93,35 @@ impl ViewController {
 
     pub fn camera_move(update_handler: &mut UpdateHandler, t: Vector3) {
         camera_helper::camera_move(&mut update_handler.camera, t);
-        update_handler.update_position();
+        update_handler.update_camera_pos();
     }
 
     pub fn camera_move_to(update_handler: &mut UpdateHandler, t: Vector3) {
         camera_helper::camera_move_to(&mut update_handler.camera, t);
-        update_handler.update_position();
+        update_handler.update_camera_pos();
     }
 
     pub fn camera_rotate(update_handler: &mut UpdateHandler, t: Vector3) {
         camera_helper::camera_rotate(&mut update_handler.camera, t, 0.01);
-        update_handler.update_position();
+        update_handler.update_camera_pos();
     }
 
-    pub fn camera_set_posture(update_handler: &mut UpdateHandler, forward: Vector3, up: Vector3) {
-        update_handler.camera.forward = forward;
+    pub fn camera_set_posture(update_handler: &mut UpdateHandler, right: Vector3, up: Vector3) {
+        update_handler.camera.right = right;
         update_handler.camera.up = up;
-        update_handler.camera.right = vecmath::vec3_cross(up, forward);
-        update_handler.update_position();
-    }
-
-    pub fn slice_move_to(update_handler: &mut UpdateHandler, t: Vector3) {
-        let d = vec3::sub(update_handler.field_slice_viewer.position(), t);
-        update_handler.field_slice_viewer.translate(d);
-        update_handler.update_position();
+        update_handler.camera.forward = vec3::cross(right, up);
+        update_handler.update_camera_pos();
     }
 
     pub fn slice_move(update_handler: &mut UpdateHandler, t: Vector3) {
         update_handler.field_slice_viewer.translate(t);
-        update_handler.update_position();
+    }
+
+    pub fn slice_rotate(update_handler: &mut UpdateHandler, axis: Vector3) {
+        update_handler.field_slice_viewer.rotate(axis, 0.05);
+    }
+
+    pub fn slice_set_posture(update_handler: &mut UpdateHandler, right: Vector3, up: Vector3) {
+        update_handler.field_slice_viewer.set_posture(right, up);
     }
 }

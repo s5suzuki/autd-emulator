@@ -4,7 +4,7 @@
  * Created Date: 29/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 11/05/2020
+ * Last Modified: 12/05/2020
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -19,6 +19,7 @@ const HEADER_MOD_BASE_IDX: usize = 4;
 
 const GEOMETRY_HEADER: u32 = 0xFFFFF0FF;
 
+#[allow(dead_code)]
 pub struct Modulation {
     pub(crate) mod_data: Vec<u8>,
 }

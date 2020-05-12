@@ -4,7 +4,7 @@
  * Created Date: 02/05/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 11/05/2020
+ * Last Modified: 12/05/2020
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -12,7 +12,6 @@
  */
 
 mod camera_control_tab;
-mod slice_control_tab;
 mod ui_command;
 mod ui_view;
 

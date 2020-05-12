@@ -4,7 +4,7 @@
  * Created Date: 01/05/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 11/05/2020
+ * Last Modified: 12/05/2020
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -21,11 +21,10 @@ use piston_window::{PistonWindow, UpdateEvent, Window, WindowSettings};
 use std::sync::mpsc::{Receiver, Sender};
 
 use super::camera_control_tab::CameraControlTab;
-use super::slice_control_tab::SliceControlTab;
 use crate::color;
 use crate::ui::UICommand;
 
-pub const WIN_W: u32 = 600;
+pub const WIN_W: u32 = 800;
 pub const WIN_H: u32 = 800;
 pub const MARGIN: conrod_core::Scalar = 30.0;
 
@@ -38,20 +37,14 @@ widget_ids! {
 
 pub struct App {
     pub camera_tab: CameraControlTab,
-    pub slice_tab: SliceControlTab,
     pub from_cnt: Receiver<UICommand>,
     pub release_mouse_left: bool,
 }
 
 impl App {
-    pub fn new(
-        camera_tab: CameraControlTab,
-        slice_tab: SliceControlTab,
-        from_cnt: Receiver<UICommand>,
-    ) -> Self {
+    pub fn new(camera_tab: CameraControlTab, from_cnt: Receiver<UICommand>) -> Self {
         App {
             camera_tab,
-            slice_tab,
             from_cnt,
             release_mouse_left: false,
         }
@@ -86,23 +79,18 @@ pub fn gui(ui: &mut conrod_core::UiCell, ids: &Ids, app: &mut App) {
         .color(color::DARK)
         .set(ids.canvas, ui);
 
-    widget::tabs::Tabs::new(&[
-        (app.camera_tab.ids().canvas, "Camera"),
-        (app.slice_tab.ids().canvas, "Slice"),
-    ])
-    .layout_horizontally()
-    .wh_of(ids.canvas)
-    .color(color::DARK)
-    .middle_of(ids.canvas)
-    .pad(MARGIN)
-    .set(ids.tabs, ui);
+    widget::tabs::Tabs::new(&[(app.camera_tab.ids().canvas, "Camera")])
+        .layout_horizontally()
+        .wh_of(ids.canvas)
+        .color(color::DARK)
+        .middle_of(ids.canvas)
+        .pad(MARGIN)
+        .set(ids.tabs, ui);
 
     app.camera_tab.gui(ui);
-    app.slice_tab.gui(ui);
 
     if app.release_mouse_left {
         app.camera_tab.release_mouse_left();
-        app.slice_tab.release_mouse_left();
         app.release_mouse_left = false;
     }
 }
@@ -152,8 +140,7 @@ pub fn window_2d(from_cnt: Receiver<UICommand>, to_cnt: Sender<UICommand>) {
 
     let image_map = conrod_core::image::Map::new();
     let camera_tab = CameraControlTab::new(to_cnt.clone(), &mut ui);
-    let slice_tab = SliceControlTab::new(to_cnt.clone(), &mut ui);
-    let mut app = App::new(camera_tab, slice_tab, from_cnt);
+    let mut app = App::new(camera_tab, from_cnt);
 
     while let Some(event) = window.next() {
         if let Some(Button::Mouse(button)) = event.release_args() {
@@ -177,9 +164,14 @@ pub fn window_2d(from_cnt: Receiver<UICommand>, to_cnt: Sender<UICommand>) {
             gui(&mut ui, &ids, &mut app);
             if let Ok(d) = app.from_cnt.try_recv() {
                 match d {
-                    UICommand::CameraPos(p) => app.camera_tab.set_camera_pos(p),
-                    UICommand::SlicePos(p) => app.slice_tab.set_pos(p),
-                    UICommand::SlicePosture(r, u, f) => app.slice_tab.set_posture(r, u, f),
+                    UICommand::CameraPos(p) => app.camera_tab.camera_state.set_position(p),
+                    UICommand::SlicePos(p) => app.camera_tab.slice_state.set_position(p),
+                    UICommand::CameraSetPosture { right, up } => {
+                        app.camera_tab.camera_state.set_posture(right, up)
+                    }
+                    UICommand::SliceSetPosture { right, up } => {
+                        app.camera_tab.slice_state.set_posture(right, up)
+                    }
                     _ => (),
                 }
             }

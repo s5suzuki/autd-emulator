@@ -4,7 +4,7 @@
  * Created Date: 01/05/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 01/05/2020
+ * Last Modified: 12/05/2020
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -13,6 +13,7 @@
 
 use acoustic_field_viewer::sound_source::SoundSource;
 use acoustic_field_viewer::view::UpdateHandler;
+use vecmath_utils::vec3;
 
 use std::f32::consts::PI;
 use std::sync::mpsc;
@@ -40,12 +41,12 @@ impl AUTDEventHandler {
                 if Self::is_missing_transducer(x, y) {
                     continue;
                 }
-                let x_dir = vecmath::vec3_scale(geo.right, TRANS_SIZE * x as f32);
-                let y_dir = vecmath::vec3_scale(geo.up, TRANS_SIZE * y as f32);
-                let zdir = vecmath::vec3_cross(geo.right, geo.up);
+                let x_dir = vec3::mul(geo.right, TRANS_SIZE * x as f32);
+                let y_dir = vec3::mul(geo.up, TRANS_SIZE * y as f32);
+                let zdir = vec3::cross(geo.right, geo.up);
                 let pos = geo.origin;
-                let pos = vecmath::vec3_add(pos, x_dir);
-                let pos = vecmath::vec3_add(pos, y_dir);
+                let pos = vec3::add(pos, x_dir);
+                let pos = vec3::add(pos, y_dir);
                 transducers.push(SoundSource::new(pos, zdir, PI));
             }
         }
