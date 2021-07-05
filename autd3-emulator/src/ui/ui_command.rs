@@ -4,14 +4,14 @@
  * Created Date: 01/05/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 12/05/2020
+ * Last Modified: 05/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
  *
  */
 
-use vecmath_utils::Vector3;
+use vecmath::Vector3;
 
 pub enum UICommand {
     CameraMove(Vector3<f64>),

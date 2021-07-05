@@ -1,4 +1,4 @@
-#version 150 core
+#version 450 core
 in ivec3 a_pos;
 out vec3 v_gpos;
 uniform mat4 u_model_view_proj;

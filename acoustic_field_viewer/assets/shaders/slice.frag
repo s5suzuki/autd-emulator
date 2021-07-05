@@ -1,4 +1,4 @@
-#version 450 core
+#version 150 core
 in vec3 v_gpos;
 out vec4 o_Color;
 uniform float u_color_scale;

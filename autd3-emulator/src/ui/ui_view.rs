@@ -4,7 +4,7 @@
  * Created Date: 01/05/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 12/05/2020
+ * Last Modified: 05/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -101,7 +101,7 @@ pub fn window_2d(from_cnt: Receiver<UICommand>, to_cnt: Sender<UICommand>) {
 
     let mut window: PistonWindow =
         WindowSettings::new("All Widgets - Piston Backend", [WIDTH, HEIGHT])
-            .opengl(OpenGL::V3_2)
+            .graphics_api(OpenGL::V4_5)
             .samples(4)
             .exit_on_esc(true)
             .vsync(true)
@@ -115,10 +115,11 @@ pub fn window_2d(from_cnt: Receiver<UICommand>, to_cnt: Sender<UICommand>) {
     let assets = find_folder::Search::KidsThenParents(3, 5)
         .for_folder("assets")
         .unwrap();
-    let font_path = assets.join("fonts/NotoSans-Regular.ttf");
+    let font_path = assets.join("fonts").join("NotoSans-Regular.ttf");
     ui.fonts.insert_from_file(font_path).unwrap();
 
-    let mut text_vertex_data = Vec::new();
+    let mut texture_context = window.create_texture_context();
+
     let (mut glyph_cache, mut text_texture_cache) = {
         const SCALE_TOLERANCE: f32 = 0.1;
         const POSITION_TOLERANCE: f32 = 0.1;
@@ -130,9 +131,9 @@ pub fn window_2d(from_cnt: Receiver<UICommand>, to_cnt: Sender<UICommand>) {
         let buffer_len = WIDTH as usize * HEIGHT as usize;
         let init = vec![128; buffer_len];
         let settings = TextureSettings::new();
-        let factory = &mut window.factory;
         let texture =
-            G2dTexture::from_memory_alpha(factory, &init, WIDTH, HEIGHT, &settings).unwrap();
+            G2dTexture::from_memory_alpha(&mut texture_context, &init, WIDTH, HEIGHT, &settings)
+                .unwrap();
         (cache, texture)
     };
 
@@ -142,6 +143,7 @@ pub fn window_2d(from_cnt: Receiver<UICommand>, to_cnt: Sender<UICommand>) {
     let camera_tab = CameraControlTab::new(to_cnt.clone(), &mut ui);
     let mut app = App::new(camera_tab, from_cnt);
 
+    let mut text_vertex_data = Vec::new();
     while let Some(event) = window.next() {
         if let Some(Button::Mouse(button)) = event.release_args() {
             match button {
@@ -177,21 +179,20 @@ pub fn window_2d(from_cnt: Receiver<UICommand>, to_cnt: Sender<UICommand>) {
             }
         });
 
-        window.draw_2d(&event, |context, graphics| {
+        window.draw_2d(&event, |context, graphics, device| {
             if let Some(primitives) = ui.draw_if_changed() {
-                let cache_queued_glyphs = |graphics: &mut G2d,
+                let cache_queued_glyphs = |_: &mut G2d,
                                            cache: &mut G2dTexture,
                                            rect: conrod_core::text::rt::Rect<u32>,
                                            data: &[u8]| {
                     let offset = [rect.min.x, rect.min.y];
                     let size = [rect.width(), rect.height()];
                     let format = piston_window::texture::Format::Rgba8;
-                    let encoder = &mut graphics.encoder;
                     text_vertex_data.clear();
                     text_vertex_data.extend(data.iter().flat_map(|&b| vec![255, 255, 255, b]));
                     UpdateTexture::update(
                         cache,
-                        encoder,
+                        &mut texture_context,
                         format,
                         &text_vertex_data[..],
                         offset,
@@ -214,6 +215,8 @@ pub fn window_2d(from_cnt: Receiver<UICommand>, to_cnt: Sender<UICommand>) {
                     cache_queued_glyphs,
                     texture_from_image,
                 );
+
+                texture_context.encoder.flush(device);
             }
         });
     }
