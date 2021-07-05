@@ -4,36 +4,41 @@ extern crate conrod_core;
 mod autd_event_handler;
 mod camera_helper;
 mod color;
-mod consts;
 mod interface;
 mod parser;
+mod settings;
 mod ui;
 mod viewer_controller;
 
+use std::f32::consts::PI;
 use std::sync::mpsc;
 
 use crate::autd_event_handler::AUTDEventHandler;
-use crate::consts::TRANS_SIZE;
+use crate::settings::Setting;
 use crate::ui::UiView;
 use crate::viewer_controller::ViewController;
 use acoustic_field_viewer::coloring_method::coloring_hsv;
+use acoustic_field_viewer::sound_source::SoundSource;
 use acoustic_field_viewer::view::event::*;
 use acoustic_field_viewer::view::{
     AcousticFiledSliceViewer, SoundSourceViewer, UpdateHandler, ViewWindow, ViewerSettings,
 };
+use autd3_core::hardware_defined::{NUM_TRANS_X, NUM_TRANS_Y};
 
 type Vector3 = vecmath::Vector3<f32>;
 type Matrix4 = vecmath::Matrix4<f32>;
 
 fn main() {
-    let mut interf = interface::Interface::open("127.0.0.1:50632").unwrap();
+    let setting = Setting::load("setting.json");
+    let mut interf = interface::Interface::open(&format!("127.0.0.1:{}", setting.port)).unwrap();
 
     let (tx_autd_event, rx_autd_event) = mpsc::channel();
     interf.start(tx_autd_event).unwrap();
 
+    let trans_mm = autd3_core::hardware_defined::TRANS_SPACING_MM as f32;
     let mut settings = ViewerSettings::new(
         40e3,
-        TRANS_SIZE,
+        trans_mm,
         coloring_hsv,
         scarlet::colormap::ListedColorMap::inferno(),
     );
@@ -42,7 +47,7 @@ fn main() {
 
     let source_viewer = SoundSourceViewer::new();
     let mut acoustic_field_viewer = AcousticFiledSliceViewer::new();
-    acoustic_field_viewer.translate([TRANS_SIZE * 8.5, TRANS_SIZE * 6.5, 150.]);
+    acoustic_field_viewer.translate([trans_mm * 8.5, trans_mm * 6.5, 150.]);
 
     let (from_ui, to_cnt) = mpsc::channel();
     let (from_cnt, to_ui) = mpsc::channel();
@@ -56,15 +61,14 @@ fn main() {
         autd_event_handler.update(update_handler);
         viewer_controller.update(update_handler, button);
     };
-
-    let (mut ui_view, mut ui_window) = UiView::new(to_ui, from_ui);
-
     field_view.update = Some(update);
 
+    let (mut ui_view, mut ui_window) = UiView::new(to_ui, from_ui);
     while let (Some(e_field), Some(e_ui)) = (field_window.next(), ui_window.next()) {
         field_view.renderer(&mut field_window, e_field);
         ui_view.renderer(&mut ui_window, e_ui);
     }
 
     interf.close();
+    setting.save("setting.json");
 }

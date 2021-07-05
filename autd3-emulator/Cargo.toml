@@ -16,5 +16,8 @@ find_folder = "0.3.0"
 piston_window = "0.120.0"
 quaternion = "0.4.1"
 scarlet = "1.1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 vecmath = "1.0.0"
 vecmath_util = {path="../vecmath_util"}
+autd3-core = {git = "https://github.com/shinolab/rust-autd.git", branch = "dev"}

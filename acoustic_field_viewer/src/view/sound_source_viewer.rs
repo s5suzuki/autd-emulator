@@ -248,7 +248,7 @@ impl SoundSourceViewer {
                 .create_pipeline_simple(
                     Shaders::new()
                         .set(
-                            GLSL::V1_50,
+                            GLSL::V4_50,
                             include_str!("../../assets/shaders/circle.vert"),
                         )
                         .get(version)
@@ -256,7 +256,7 @@ impl SoundSourceViewer {
                         .as_bytes(),
                     Shaders::new()
                         .set(
-                            GLSL::V1_50,
+                            GLSL::V4_50,
                             include_str!("../../assets/shaders/circle.frag"),
                         )
                         .get(version)

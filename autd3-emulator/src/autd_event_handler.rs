@@ -17,8 +17,8 @@ use acoustic_field_viewer::view::UpdateHandler;
 use std::f32::consts::PI;
 use std::sync::mpsc;
 
-use crate::consts::{NUM_TRANS_X, NUM_TRANS_Y, TRANS_SIZE};
 use crate::parser::{AUTDData, Geometry};
+use autd3_core::hardware_defined::{NUM_TRANS_X, NUM_TRANS_Y, TRANS_SPACING_MM};
 
 pub struct AUTDEventHandler {
     rx_from_autd: mpsc::Receiver<Vec<u8>>,
@@ -29,19 +29,15 @@ impl AUTDEventHandler {
         AUTDEventHandler { rx_from_autd }
     }
 
-    fn is_missing_transducer(x: usize, y: usize) -> bool {
-        y == 1 && (x == 1 || x == 2 || x == 16)
-    }
-
     fn make_autd_transducers(geo: Geometry) -> Vec<SoundSource> {
         let mut transducers = Vec::new();
         for y in 0..NUM_TRANS_Y {
             for x in 0..NUM_TRANS_X {
-                if Self::is_missing_transducer(x, y) {
+                if autd3_core::hardware_defined::is_missing_transducer(x, y) {
                     continue;
                 }
-                let x_dir = vecmath::vec3_scale(geo.right, TRANS_SIZE * x as f32);
-                let y_dir = vecmath::vec3_scale(geo.up, TRANS_SIZE * y as f32);
+                let x_dir = vecmath::vec3_scale(geo.right, TRANS_SPACING_MM as f32 * x as f32);
+                let y_dir = vecmath::vec3_scale(geo.up, TRANS_SPACING_MM as f32 * y as f32);
                 let zdir = vecmath::vec3_cross(geo.right, geo.up);
                 let pos = geo.origin;
                 let pos = vecmath::vec3_add(pos, x_dir);
@@ -58,6 +54,7 @@ impl AUTDEventHandler {
             for d in data {
                 match d {
                     AUTDData::Geometries(geometries) => {
+                        update_handler.sources.borrow_mut().clear();
                         for geometry in geometries {
                             let transducers = Self::make_autd_transducers(geometry);
                             for trans in transducers {
@@ -78,9 +75,9 @@ impl AUTDEventHandler {
                         update_handler.update_phase();
                     }
                     AUTDData::Clear => {
-                        update_handler.sources.borrow_mut().clear();
-                        update_handler.update_position();
-                        update_handler.update_phase();
+                        for source in update_handler.sources.borrow_mut().iter_mut() {
+                            source.phase = 0.;
+                        }
                     }
                     _ => (),
                 }
