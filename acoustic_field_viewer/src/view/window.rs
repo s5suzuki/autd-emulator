@@ -98,7 +98,6 @@ where
     pub update: Option<F>,
     update_handler: UpdateHandler,
     projection: Matrix4,
-    window: PistonWindow,
 }
 
 impl<F> ViewWindow<F>
@@ -110,7 +109,7 @@ where
         sound_source_viewer: SoundSourceViewer,
         field_slice_viewer: AcousticFiledSliceViewer,
         settings: ViewerSettings,
-    ) -> ViewWindow<F> {
+    ) -> (ViewWindow<F>, PistonWindow) {
         let opengl = OpenGL::V4_5;
         let mut window: PistonWindow = WindowSettings::new("", [640, 480])
             .exit_on_esc(true)
@@ -141,52 +140,45 @@ where
         field_slice_viewer.render_setting(&window, opengl);
         sound_source_viewer.render_setting(&mut window, opengl);
 
-        ViewWindow {
-            update: None,
-            update_handler: UpdateHandler::new(
-                ref_sources,
-                sound_source_viewer,
-                field_slice_viewer,
-                ref_settings,
-                camera,
-            ),
-            projection,
+        (
+            ViewWindow {
+                update: None,
+                update_handler: UpdateHandler::new(
+                    ref_sources,
+                    sound_source_viewer,
+                    field_slice_viewer,
+                    ref_settings,
+                    camera,
+                ),
+                projection,
+            },
             window,
-        }
+        )
     }
 
-    pub fn start(self) {
-        let mut window = self.window;
-        let mut update = self.update;
-        let mut projection = self.projection;
-        let mut update_handler = self.update_handler;
-        while let Some(e) = window.next() {
-            if let Some(update_fn) = &mut update {
-                update_fn(&mut update_handler, e.press_args());
-                update_handler.update_sources();
-            }
+    pub fn renderer(&mut self, window: &mut PistonWindow, event: Event) {
+        if let Some(update_fn) = &mut self.update {
+            update_fn(&mut self.update_handler, event.press_args());
+            self.update_handler.update_sources();
+        }
 
-            window.draw_3d(&e, |window| {
-                window
-                    .encoder
-                    .clear(&window.output_color, [0.3, 0.3, 0.3, 1.0]);
-                window.encoder.clear_depth(&window.output_stencil, 1.0);
-                update_handler.sound_source_viewer.renderer(
-                    window,
-                    &e,
-                    update_handler.camera.orthogonal(),
-                    projection,
-                );
-                update_handler.field_slice_viewer.renderer(
-                    window,
-                    &e,
-                    update_handler.camera.orthogonal(),
-                    projection,
-                );
-            });
-            if e.resize_args().is_some() {
-                projection = ViewWindow::<F>::get_projection(&window);
-            }
+        let cam_orth = self.update_handler.camera.orthogonal();
+        let projection = self.projection;
+        window.draw_3d(&event, |window| {
+            window
+                .encoder
+                .clear(&window.output_color, [0.3, 0.3, 0.3, 1.0]);
+            window.encoder.clear_depth(&window.output_stencil, 1.0);
+
+            self.update_handler
+                .sound_source_viewer
+                .renderer(window, &event, cam_orth, projection);
+            self.update_handler
+                .field_slice_viewer
+                .renderer(window, &event, cam_orth, projection);
+        });
+        if event.resize_args().is_some() {
+            self.projection = ViewWindow::<F>::get_projection(&window);
         }
     }
 

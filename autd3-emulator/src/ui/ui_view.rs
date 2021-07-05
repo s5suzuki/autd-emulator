@@ -11,8 +11,9 @@
  *
  */
 
-use conrod_core::Colorable;
+use conrod_core::text::GlyphCache;
 use conrod_core::{widget, Positionable, Sizeable, Widget};
+use conrod_core::{Colorable, Ui};
 use piston_window::texture::UpdateTexture;
 use piston_window::*;
 use piston_window::{G2d, G2dTexture, TextureSettings};
@@ -95,12 +96,21 @@ pub fn gui(ui: &mut conrod_core::UiCell, ids: &Ids, app: &mut App) {
     }
 }
 
-pub fn window_2d(from_cnt: Receiver<UICommand>, to_cnt: Sender<UICommand>) {
-    const WIDTH: u32 = WIN_W;
-    const HEIGHT: u32 = WIN_H;
+pub struct UiView<'a> {
+    app: App,
+    ui: Ui,
+    ids: Ids,
+    text_texture_cache: G2dTexture,
+    glyph_cache: GlyphCache<'a>,
+    image_map: conrod_core::image::Map<G2dTexture>,
+}
 
-    let mut window: PistonWindow =
-        WindowSettings::new("All Widgets - Piston Backend", [WIDTH, HEIGHT])
+impl<'a> UiView<'a> {
+    pub fn new(from_cnt: Receiver<UICommand>, to_cnt: Sender<UICommand>) -> (Self, PistonWindow) {
+        const WIDTH: u32 = WIN_W;
+        const HEIGHT: u32 = WIN_H;
+
+        let mut window: PistonWindow = WindowSettings::new("AUTD3 emulator", [800, 800])
             .graphics_api(OpenGL::V4_5)
             .samples(4)
             .exit_on_esc(true)
@@ -108,46 +118,63 @@ pub fn window_2d(from_cnt: Receiver<UICommand>, to_cnt: Sender<UICommand>) {
             .build()
             .unwrap();
 
-    let mut ui = conrod_core::UiBuilder::new([WIDTH as f64, HEIGHT as f64])
-        .theme(theme())
-        .build();
-
-    let assets = find_folder::Search::KidsThenParents(3, 5)
-        .for_folder("assets")
-        .unwrap();
-    let font_path = assets.join("fonts").join("NotoSans-Regular.ttf");
-    ui.fonts.insert_from_file(font_path).unwrap();
-
-    let mut texture_context = window.create_texture_context();
-
-    let (mut glyph_cache, mut text_texture_cache) = {
-        const SCALE_TOLERANCE: f32 = 0.1;
-        const POSITION_TOLERANCE: f32 = 0.1;
-        let cache = conrod_core::text::GlyphCache::builder()
-            .dimensions(WIDTH, HEIGHT)
-            .scale_tolerance(SCALE_TOLERANCE)
-            .position_tolerance(POSITION_TOLERANCE)
+        let mut ui = conrod_core::UiBuilder::new([WIDTH as f64, HEIGHT as f64])
+            .theme(theme())
             .build();
-        let buffer_len = WIDTH as usize * HEIGHT as usize;
-        let init = vec![128; buffer_len];
-        let settings = TextureSettings::new();
-        let texture =
-            G2dTexture::from_memory_alpha(&mut texture_context, &init, WIDTH, HEIGHT, &settings)
-                .unwrap();
-        (cache, texture)
-    };
 
-    let ids = Ids::new(ui.widget_id_generator());
+        let assets = find_folder::Search::KidsThenParents(3, 5)
+            .for_folder("assets")
+            .unwrap();
+        let font_path = assets.join("fonts").join("NotoSans-Regular.ttf");
+        ui.fonts.insert_from_file(font_path).unwrap();
 
-    let image_map = conrod_core::image::Map::new();
-    let camera_tab = CameraControlTab::new(to_cnt.clone(), &mut ui);
-    let mut app = App::new(camera_tab, from_cnt);
+        let mut texture_context = window.create_texture_context();
 
-    let mut text_vertex_data = Vec::new();
-    while let Some(event) = window.next() {
+        let (glyph_cache, text_texture_cache) = {
+            const SCALE_TOLERANCE: f32 = 0.1;
+            const POSITION_TOLERANCE: f32 = 0.1;
+            let cache = conrod_core::text::GlyphCache::builder()
+                .dimensions(WIDTH, HEIGHT)
+                .scale_tolerance(SCALE_TOLERANCE)
+                .position_tolerance(POSITION_TOLERANCE)
+                .build();
+            let buffer_len = WIDTH as usize * HEIGHT as usize;
+            let init = vec![128; buffer_len];
+            let settings = TextureSettings::new();
+            let texture = G2dTexture::from_memory_alpha(
+                &mut texture_context,
+                &init,
+                WIDTH,
+                HEIGHT,
+                &settings,
+            )
+            .unwrap();
+            (cache, texture)
+        };
+
+        let ids = Ids::new(ui.widget_id_generator());
+
+        let image_map = conrod_core::image::Map::new();
+        let camera_tab = CameraControlTab::new(to_cnt.clone(), &mut ui);
+        let app = App::new(camera_tab, from_cnt);
+
+        (
+            Self {
+                app,
+                ui,
+                glyph_cache,
+                ids,
+                image_map,
+                text_texture_cache,
+            },
+            window,
+        )
+    }
+
+    pub fn renderer(&mut self, window: &mut PistonWindow, event: Event) {
         if let Some(Button::Mouse(button)) = event.release_args() {
             match button {
-                MouseButton::Left => app.release_mouse_left = true,
+                MouseButton::Left => self.app.release_mouse_left = true,
                 _ => (),
             }
         }
@@ -158,29 +185,30 @@ pub fn window_2d(from_cnt: Receiver<UICommand>, to_cnt: Sender<UICommand>) {
             size.height as conrod_core::Scalar,
         );
         if let Some(e) = conrod_piston::event::convert(event.clone(), win_w, win_h) {
-            ui.handle_event(e);
+            self.ui.handle_event(e);
         }
 
         event.update(|_| {
-            let mut ui = ui.set_widgets();
-            gui(&mut ui, &ids, &mut app);
-            if let Ok(d) = app.from_cnt.try_recv() {
+            let mut ui = self.ui.set_widgets();
+            gui(&mut ui, &self.ids, &mut self.app);
+            if let Ok(d) = self.app.from_cnt.try_recv() {
                 match d {
-                    UICommand::CameraPos(p) => app.camera_tab.camera_state.set_position(p),
-                    UICommand::SlicePos(p) => app.camera_tab.slice_state.set_position(p),
+                    UICommand::CameraPos(p) => self.app.camera_tab.camera_state.set_position(p),
+                    UICommand::SlicePos(p) => self.app.camera_tab.slice_state.set_position(p),
                     UICommand::CameraSetPosture { right, up } => {
-                        app.camera_tab.camera_state.set_posture(right, up)
+                        self.app.camera_tab.camera_state.set_posture(right, up)
                     }
                     UICommand::SliceSetPosture { right, up } => {
-                        app.camera_tab.slice_state.set_posture(right, up)
+                        self.app.camera_tab.slice_state.set_posture(right, up)
                     }
                     _ => (),
                 }
             }
         });
 
+        let mut texture_context = window.create_texture_context();
         window.draw_2d(&event, |context, graphics, device| {
-            if let Some(primitives) = ui.draw_if_changed() {
+            if let Some(primitives) = self.ui.draw_if_changed() {
                 let cache_queued_glyphs = |_: &mut G2d,
                                            cache: &mut G2dTexture,
                                            rect: conrod_core::text::rt::Rect<u32>,
@@ -188,8 +216,9 @@ pub fn window_2d(from_cnt: Receiver<UICommand>, to_cnt: Sender<UICommand>) {
                     let offset = [rect.min.x, rect.min.y];
                     let size = [rect.width(), rect.height()];
                     let format = piston_window::texture::Format::Rgba8;
-                    text_vertex_data.clear();
-                    text_vertex_data.extend(data.iter().flat_map(|&b| vec![255, 255, 255, b]));
+
+                    let text_vertex_data: Vec<_> =
+                        data.iter().flat_map(|&b| vec![255, 255, 255, b]).collect();
                     UpdateTexture::update(
                         cache,
                         &mut texture_context,
@@ -209,9 +238,9 @@ pub fn window_2d(from_cnt: Receiver<UICommand>, to_cnt: Sender<UICommand>) {
                     primitives,
                     context,
                     graphics,
-                    &mut text_texture_cache,
-                    &mut glyph_cache,
-                    &image_map,
+                    &mut self.text_texture_cache,
+                    &mut self.glyph_cache,
+                    &self.image_map,
                     cache_queued_glyphs,
                     texture_from_image,
                 );

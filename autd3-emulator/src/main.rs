@@ -12,15 +12,15 @@ mod viewer_controller;
 
 use std::sync::mpsc;
 
+use crate::autd_event_handler::AUTDEventHandler;
+use crate::consts::TRANS_SIZE;
+use crate::ui::UiView;
+use crate::viewer_controller::ViewController;
 use acoustic_field_viewer::coloring_method::coloring_hsv;
 use acoustic_field_viewer::view::event::*;
 use acoustic_field_viewer::view::{
     AcousticFiledSliceViewer, SoundSourceViewer, UpdateHandler, ViewWindow, ViewerSettings,
 };
-
-use crate::autd_event_handler::AUTDEventHandler;
-use crate::consts::TRANS_SIZE;
-use crate::viewer_controller::ViewController;
 
 type Vector3 = vecmath::Vector3<f32>;
 type Matrix4 = vecmath::Matrix4<f32>;
@@ -39,6 +39,7 @@ fn main() {
     );
     settings.color_scale = 0.6;
     settings.slice_alpha = 0.95;
+
     let source_viewer = SoundSourceViewer::new();
     let mut acoustic_field_viewer = AcousticFiledSliceViewer::new();
     acoustic_field_viewer.translate([TRANS_SIZE * 8.5, TRANS_SIZE * 6.5, 150.]);
@@ -46,7 +47,8 @@ fn main() {
     let (from_ui, to_cnt) = mpsc::channel();
     let (from_cnt, to_ui) = mpsc::channel();
 
-    let mut window = ViewWindow::new(vec![], source_viewer, acoustic_field_viewer, settings);
+    let (mut field_view, mut field_window) =
+        ViewWindow::new(vec![], source_viewer, acoustic_field_viewer, settings);
 
     let autd_event_handler = AUTDEventHandler::new(rx_autd_event);
     let mut viewer_controller = ViewController::new(to_cnt, from_cnt);
@@ -55,10 +57,14 @@ fn main() {
         viewer_controller.update(update_handler, button);
     };
 
-    ui::window_2d(to_ui, from_ui);
+    let (mut ui_view, mut ui_window) = UiView::new(to_ui, from_ui);
 
-    window.update = Some(update);
-    window.start();
+    field_view.update = Some(update);
+
+    while let (Some(e_field), Some(e_ui)) = (field_window.next(), ui_window.next()) {
+        field_view.renderer(&mut field_window, e_field);
+        ui_view.renderer(&mut ui_window, e_ui);
+    }
 
     interf.close();
 }

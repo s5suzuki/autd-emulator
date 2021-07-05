@@ -151,30 +151,30 @@ impl AcousticFiledSliceViewer {
 
     pub fn set_posture(&mut self, right: Vector3, up: Vector3) {
         let forward = vecmath::vec3_cross(right, up);
-        let pos = vecmath::col_mat4_row(self.model, 3);
+        let pos = self.model[3];
         let model = [
             vecmath::vec4_scale(vecmath_util::to_vec4(right), 100.0),
             vecmath::vec4_scale(vecmath_util::to_vec4(up), 100.0),
             vecmath::vec4_scale(vecmath_util::to_vec4(forward), 100.0),
-            vecmath::vec4_scale(pos, 100.0),
+            pos,
         ];
         self.model = model;
     }
 
     pub fn position(&self) -> Vector3 {
-        vecmath_util::to_vec3(&vecmath::col_mat4_row(self.model, 3))
+        vecmath_util::to_vec3(&self.model[3])
     }
 
     pub fn right(&self) -> Vector3 {
-        vecmath::vec3_normalized(vecmath_util::to_vec3(&vecmath::col_mat4_row(self.model, 0)))
+        vecmath::vec3_normalized(vecmath_util::to_vec3(&self.model[0]))
     }
 
     pub fn up(&self) -> Vector3 {
-        vecmath::vec3_normalized(vecmath_util::to_vec3(&vecmath::col_mat4_row(self.model, 1)))
+        vecmath::vec3_normalized(vecmath_util::to_vec3(&self.model[1]))
     }
 
     pub fn forward(&self) -> Vector3 {
-        vecmath::vec3_normalized(vecmath_util::to_vec3(&vecmath::col_mat4_row(self.model, 2)))
+        vecmath::vec3_normalized(vecmath_util::to_vec3(&self.model[2]))
     }
 
     pub fn rotate(&mut self, axis: Vector3, rot: f32) {
@@ -413,12 +413,12 @@ impl AcousticFiledSliceViewer {
             factory
                 .create_pipeline_simple(
                     Shaders::new()
-                        .set(GLSL::V1_50, include_str!("../../assets/shaders/slice.vert"))
+                        .set(GLSL::V4_50, include_str!("../../assets/shaders/slice.vert"))
                         .get(version)
                         .unwrap()
                         .as_bytes(),
                     Shaders::new()
-                        .set(GLSL::V1_50, include_str!("../../assets/shaders/slice.frag"))
+                        .set(GLSL::V4_50, include_str!("../../assets/shaders/slice.frag"))
                         .get(version)
                         .unwrap()
                         .as_bytes(),

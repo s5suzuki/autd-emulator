@@ -4,7 +4,7 @@
  * Created Date: 27/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 01/05/2020
+ * Last Modified: 05/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -17,7 +17,6 @@ use std::f32::consts::PI;
 
 use acoustic_field_viewer::coloring_method::coloring_hsv;
 use acoustic_field_viewer::sound_source::SoundSource;
-use acoustic_field_viewer::vec_utils;
 use acoustic_field_viewer::view::event::*;
 use acoustic_field_viewer::view::{
     AcousticFiledSliceViewer, SoundSourceViewer, UpdateHandler, ViewWindow, ViewerSettings,
@@ -26,7 +25,7 @@ use acoustic_field_viewer::view::{
 pub fn main() {
     const NUM_TRANS_X: usize = 18;
     const NUM_TRANS_Y: usize = 14;
-    const TRANS_SIZE: f32 = 10.18;
+    const TRANS_SIZE: f32 = 10.16;
     const WAVE_LENGTH: f32 = 8.5;
 
     let mut focal_pos = [TRANS_SIZE * 8.5, TRANS_SIZE * 6.5, 150.];
@@ -36,7 +35,7 @@ pub fn main() {
     for y in 0..NUM_TRANS_Y {
         for x in 0..NUM_TRANS_X {
             let pos = [TRANS_SIZE * x as f32, TRANS_SIZE * y as f32, 0.];
-            let d = vec_utils::dist(pos, focal_pos);
+            let d = vecmath_util::dist(pos, focal_pos);
             let phase = (d % WAVE_LENGTH) / WAVE_LENGTH;
             let phase = 2.0 * PI * phase;
             transducers.push(SoundSource::new(pos, zdir, phase));
@@ -55,19 +54,20 @@ pub fn main() {
     let source_viewer = SoundSourceViewer::new();
     let mut acoustic_field_viewer = AcousticFiledSliceViewer::new();
     acoustic_field_viewer.translate(focal_pos);
+    acoustic_field_viewer.set_posture([1., 0., 0.], [0., 0., 1.]);
 
     let update = |update_handler: &mut UpdateHandler, button: Option<Button>| {
         let travel = 5.0;
         match button {
             Some(Button::Keyboard(Key::Up)) => {
-                update_handler.camera.position =
-                    vecmath::vec3_add(update_handler.camera.position, [0., travel, 0.]);
-                update_handler.update_position();
+                update_handler
+                    .field_slice_viewer
+                    .translate([0., 0., travel]);
             }
             Some(Button::Keyboard(Key::Down)) => {
-                update_handler.camera.position =
-                    vecmath::vec3_add(update_handler.camera.position, [0., travel, 0.]);
-                update_handler.update_position();
+                update_handler
+                    .field_slice_viewer
+                    .translate([0., 0., -travel]);
             }
             Some(Button::Keyboard(Key::Left)) => {
                 update_handler
@@ -131,7 +131,11 @@ pub fn main() {
         }
     };
 
-    let mut window = ViewWindow::new(transducers, source_viewer, acoustic_field_viewer, settings);
-    window.update = Some(update);
-    window.start();
+    let (mut window_view, mut window) =
+        ViewWindow::new(transducers, source_viewer, acoustic_field_viewer, settings);
+    window_view.update = Some(update);
+
+    while let Some(e) = window.next() {
+        window_view.renderer(&mut window, e);
+    }
 }
