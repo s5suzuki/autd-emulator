@@ -155,17 +155,17 @@ impl<'a> UiView<'a> {
         let ids = Ids::new(ui.widget_id_generator());
 
         let image_map = conrod_core::image::Map::new();
-        let camera_tab = CameraControlTab::new(to_cnt.clone(), &mut ui);
+        let camera_tab = CameraControlTab::new(to_cnt, &mut ui);
         let app = App::new(camera_tab, from_cnt);
 
         (
             Self {
                 app,
                 ui,
-                glyph_cache,
                 ids,
-                image_map,
                 text_texture_cache,
+                glyph_cache,
+                image_map,
             },
             window,
         )
@@ -173,9 +173,8 @@ impl<'a> UiView<'a> {
 
     pub fn renderer(&mut self, window: &mut PistonWindow, event: Event) {
         if let Some(Button::Mouse(button)) = event.release_args() {
-            match button {
-                MouseButton::Left => self.app.release_mouse_left = true,
-                _ => (),
+            if button == MouseButton::Left {
+                self.app.release_mouse_left = true;
             }
         }
 

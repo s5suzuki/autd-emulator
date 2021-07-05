@@ -226,7 +226,7 @@ impl SoundSourceViewer {
         let sampler_info = SamplerInfo::new(FilterMethod::Bilinear, WrapMode::Clamp);
         self.pipe_data_list = vec![
             pipe::Data {
-                vertex_buffer: vertex_buffer,
+                vertex_buffer,
                 u_model_view_proj: [[0.; 4]; 4],
                 t_color: (view, factory.create_sampler(sampler_info)),
                 i_color: [0., 0., 0., 1.],
@@ -267,5 +267,11 @@ impl SoundSourceViewer {
                 .unwrap(),
             slice,
         ));
+    }
+}
+
+impl Default for SoundSourceViewer {
+    fn default() -> Self {
+        Self::new()
     }
 }

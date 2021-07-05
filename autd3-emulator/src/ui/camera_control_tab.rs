@@ -261,7 +261,7 @@ impl CameraControlTab {
                 .set(ids.z_grip, ui);
 
             let grip_z_range = 1.0;
-            for (_, y) in widget::XYPad::new(
+            if let Some((_, y)) = widget::XYPad::new(
                 0.,
                 0.,
                 0.,
@@ -293,7 +293,7 @@ impl CameraControlTab {
 
             let grip_x_range = 1.0;
             let grip_y_range = 1.0;
-            for (x, y) in widget::XYPad::new(
+            if let Some((x, y)) = widget::XYPad::new(
                 self.move_xy[0],
                 -grip_x_range / 2.0,
                 grip_x_range / 2.0,
@@ -369,13 +369,10 @@ impl CameraControlTab {
                 .left_justify()
                 .set(ids.move_speed, ui)
             {
-                match txt {
-                    Event::Update(s) => {
-                        if let Ok(f) = s.parse() {
-                            self.move_speed = f
-                        }
+                if let Event::Update(s) = txt {
+                    if let Ok(f) = s.parse() {
+                        self.move_speed = f;
                     }
-                    _ => (),
                 }
             }
         }
@@ -391,29 +388,27 @@ impl CameraControlTab {
             {
                 if self.camera_enabled {
                     let pos_txt = &self.camera_state.pos_txt;
-                    match (pos_txt[0].parse(), pos_txt[1].parse(), pos_txt[2].parse()) {
-                        (Ok(x), Ok(y), Ok(z)) => {
-                            self.camera_state.pos = [x, y, z];
-                            self.to_cnt
-                                .send(UICommand::CameraMoveTo(self.camera_state.pos))
-                                .unwrap()
-                        }
-                        _ => (),
+                    if let (Ok(x), Ok(y), Ok(z)) =
+                        (pos_txt[0].parse(), pos_txt[1].parse(), pos_txt[2].parse())
+                    {
+                        self.camera_state.pos = [x, y, z];
+                        self.to_cnt
+                            .send(UICommand::CameraMoveTo(self.camera_state.pos))
+                            .unwrap()
                     }
                 } else {
                     let pos_txt = &self.slice_state.pos_txt;
-                    match (pos_txt[0].parse(), pos_txt[1].parse(), pos_txt[2].parse()) {
-                        (Ok(x), Ok(y), Ok(z)) => {
-                            let old = self.slice_state.pos;
-                            self.slice_state.pos = [x, y, z];
-                            self.to_cnt
-                                .send(UICommand::SliceMove(vecmath::vec3_sub(
-                                    self.slice_state.pos,
-                                    old,
-                                )))
-                                .unwrap()
-                        }
-                        _ => (),
+                    if let (Ok(x), Ok(y), Ok(z)) =
+                        (pos_txt[0].parse(), pos_txt[1].parse(), pos_txt[2].parse())
+                    {
+                        let old = self.slice_state.pos;
+                        self.slice_state.pos = [x, y, z];
+                        self.to_cnt
+                            .send(UICommand::SliceMove(vecmath::vec3_sub(
+                                self.slice_state.pos,
+                                old,
+                            )))
+                            .unwrap()
                     }
                 }
             }
@@ -498,7 +493,7 @@ impl CameraControlTab {
                 .x_y_relative_to(ids.roll_pad, self.rot_roll * CONTROL_PAD_SIZE, 0.)
                 .set(ids.roll_grip, ui);
             let grip_roll_range = 1.0;
-            for (x, _) in widget::XYPad::new(
+            if let Some((x, _)) = widget::XYPad::new(
                 self.rot_roll,
                 -grip_roll_range / 2.0,
                 grip_roll_range / 2.0,
@@ -528,7 +523,7 @@ impl CameraControlTab {
                 .set(ids.pitch_yaw_grip, ui);
             let ball_x_range = 1.0;
             let ball_y_range = 1.0;
-            for (x, y) in widget::XYPad::new(
+            if let Some((x, y)) = widget::XYPad::new(
                 self.rot_pitch_yaw[0],
                 -ball_x_range / 2.0,
                 ball_x_range / 2.0,

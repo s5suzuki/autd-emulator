@@ -40,45 +40,44 @@ pub enum AUTDData {
     Gain(Gain),
     Geometries(Vec<Geometry>),
     Clear,
+    Pause,
+    Resume,
 }
 
 pub fn parse(raw_buf: Vec<u8>) -> Vec<AUTDData> {
     let mut res = Vec::new();
 
-    let mut raw_buf = raw_buf;
-    let cmd = unsafe {
-        let header = raw_buf.as_mut_ptr() as *mut RxGlobalHeader;
-        (*header).command
+    let (cmd, _ctrl_flag) = unsafe {
+        let header = raw_buf.as_ptr() as *const RxGlobalHeader;
+        ((*header).command, (*header).ctrl_flag)
     };
 
     match cmd {
         autd3_core::hardware_defined::CommandType::Clear => res.push(AUTDData::Clear),
-        autd3_core::hardware_defined::CommandType::Op => {}
+        autd3_core::hardware_defined::CommandType::Op => {
+            res.push(AUTDData::Resume);
+
+            let modulation = parse_as_modulation(&raw_buf);
+            res.push(AUTDData::Modulation(modulation));
+
+            if raw_buf.len() > size_of::<RxGlobalHeader>() {
+                let gain = parse_as_gain(&raw_buf[size_of::<RxGlobalHeader>()..]);
+                res.push(AUTDData::Gain(gain));
+            }
+        }
         autd3_core::hardware_defined::CommandType::ReadCpuVerLsb => {}
         autd3_core::hardware_defined::CommandType::ReadCpuVerMsb => {}
         autd3_core::hardware_defined::CommandType::ReadFpgaVerLsb => {}
         autd3_core::hardware_defined::CommandType::ReadFpgaVerMsb => {}
         autd3_core::hardware_defined::CommandType::SeqMode => {}
         autd3_core::hardware_defined::CommandType::SetDelay => {}
-        autd3_core::hardware_defined::CommandType::Pause => {}
-        autd3_core::hardware_defined::CommandType::Resume => {}
+        autd3_core::hardware_defined::CommandType::Pause => res.push(AUTDData::Pause),
+        autd3_core::hardware_defined::CommandType::Resume => res.push(AUTDData::Resume),
         autd3_core::hardware_defined::CommandType::EmulatorSetGeometry => {
             let geo = parse_as_geometry(&raw_buf[size_of::<RxGlobalHeader>()..]);
             res.push(AUTDData::Geometries(geo))
         }
     }
-
-    // if is_clear(&raw_buf) {
-    // } else if is_geometry(&raw_buf) {
-    // } else if is_header(&raw_buf) {
-    //     let modulation = parse_as_modulation(&raw_buf);
-    //     res.push(AUTDData::Modulation(modulation));
-
-    //     if include_gain(&raw_buf) {
-    //         let gain = parse_as_gain(&raw_buf[HEADER_SIZE..]);
-    //         res.push(AUTDData::Gain(gain));
-    //     }
-    // }
 
     res
 }
@@ -95,22 +94,24 @@ pub fn parse_as_geometry(buf: &[u8]) -> Vec<Geometry> {
     res
 }
 
-// pub fn parse_as_modulation(buf: &[u8]) -> Modulation {
-//     let mod_size = buf[HEADER_MOD_SIZE_IDX];
-//     Modulation {
-//         mod_data: buf[HEADER_MOD_BASE_IDX..(HEADER_MOD_BASE_IDX + mod_size as usize)].to_vec(),
-//     }
-// }
+pub fn parse_as_modulation(buf: &[u8]) -> Modulation {
+    unsafe {
+        let header = buf.as_ptr() as *const RxGlobalHeader;
+        let mod_size = (*header).mod_size as usize;
+        let mod_data = (*header).mod_data[0..mod_size].to_vec();
+        Modulation { mod_data }
+    }
+}
 
-// pub fn parse_as_gain(buf: &[u8]) -> Gain {
-//     let mut amps = Vec::with_capacity(buf.len() / 2);
-//     let mut phases = Vec::with_capacity(buf.len() / 2);
-//     for amp_phase in buf.chunks_exact(2) {
-//         phases.push(amp_phase[0]);
-//         amps.push(amp_phase[1]);
-//     }
-//     Gain { amps, phases }
-// }
+pub fn parse_as_gain(buf: &[u8]) -> Gain {
+    let mut amps = Vec::with_capacity(buf.len() / 2);
+    let mut phases = Vec::with_capacity(buf.len() / 2);
+    for amp_phase in buf.chunks_exact(2) {
+        phases.push(amp_phase[0]);
+        amps.push(amp_phase[1]);
+    }
+    Gain { amps, phases }
+}
 
 fn to_vec3(buf: &[u8], cursor: &mut usize) -> Vector3 {
     let x = to_f32(buf, cursor);

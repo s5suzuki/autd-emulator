@@ -93,7 +93,7 @@ impl UpdateHandler {
 
 pub struct ViewWindow<F>
 where
-    F: FnMut(&mut UpdateHandler, Option<Button>) -> (),
+    F: FnMut(&mut UpdateHandler, Option<Button>),
 {
     pub update: Option<F>,
     update_handler: UpdateHandler,
@@ -102,7 +102,7 @@ where
 
 impl<F> ViewWindow<F>
 where
-    F: FnMut(&mut UpdateHandler, Option<Button>) -> (),
+    F: FnMut(&mut UpdateHandler, Option<Button>),
 {
     pub fn new(
         sources: Vec<SoundSource>,

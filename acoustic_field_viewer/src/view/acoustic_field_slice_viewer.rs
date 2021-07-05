@@ -429,3 +429,9 @@ impl AcousticFiledSliceViewer {
         ));
     }
 }
+
+impl Default for AcousticFiledSliceViewer {
+    fn default() -> Self {
+        Self::new()
+    }
+}

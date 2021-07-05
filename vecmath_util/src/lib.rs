@@ -9,7 +9,7 @@ pub fn is_zero<T: std::cmp::PartialEq<T> + num_traits::Zero>(vec: &[T]) -> bool 
             return false;
         }
     }
-    return true;
+    true
 }
 
 pub fn vec3_map<F, T>(v: Vector3, func: F) -> [T; 3]
@@ -31,7 +31,7 @@ pub fn to_vec4(v: Vector3) -> Vector4 {
 }
 
 pub fn to_vec3<T: Copy + num_traits::Zero>(v: &[T]) -> vecmath::Vector3<T> {
-    let x = if v.len() > 0 { v[0] } else { T::zero() };
+    let x = if !v.is_empty() { v[0] } else { T::zero() };
     let y = if v.len() > 1 { v[1] } else { T::zero() };
     let z = if v.len() > 2 { v[2] } else { T::zero() };
     [x, y, z]

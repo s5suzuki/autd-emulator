@@ -79,6 +79,8 @@ impl AUTDEventHandler {
                             source.phase = 0.;
                         }
                     }
+                    AUTDData::Pause => {}
+                    AUTDData::Resume => {}
                     _ => (),
                 }
             }

@@ -10,7 +10,6 @@ mod settings;
 mod ui;
 mod viewer_controller;
 
-use std::f32::consts::PI;
 use std::sync::mpsc;
 
 use crate::autd_event_handler::AUTDEventHandler;
@@ -18,12 +17,10 @@ use crate::settings::Setting;
 use crate::ui::UiView;
 use crate::viewer_controller::ViewController;
 use acoustic_field_viewer::coloring_method::coloring_hsv;
-use acoustic_field_viewer::sound_source::SoundSource;
 use acoustic_field_viewer::view::event::*;
 use acoustic_field_viewer::view::{
     AcousticFiledSliceViewer, SoundSourceViewer, UpdateHandler, ViewWindow, ViewerSettings,
 };
-use autd3_core::hardware_defined::{NUM_TRANS_X, NUM_TRANS_Y};
 
 type Vector3 = vecmath::Vector3<f32>;
 type Matrix4 = vecmath::Matrix4<f32>;
