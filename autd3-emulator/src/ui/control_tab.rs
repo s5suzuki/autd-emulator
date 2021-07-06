@@ -1,10 +1,10 @@
 /*
- * File: camera_control_tab.rs
+ * File: control_tab.rs
  * Project: ui
  * Created Date: 02/05/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 12/05/2020
+ * Last Modified: 06/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -14,8 +14,6 @@
 use conrod_core::widget::text_box::Event;
 use conrod_core::Colorable;
 use conrod_core::{widget, Labelable, Positionable, Sizeable, Widget};
-use vecmath_utils::Vector2;
-use vecmath_utils::{mat4, vec2, vec3};
 
 use crate::color;
 use crate::ui::ui_view::{MARGIN, WIN_W};
@@ -43,7 +41,6 @@ widget_ids! {
         move_speed,
         position_label[],
         position_textbox[],
-        update_position_button,
         auto_view_button,
 
         rotation_title,
@@ -72,10 +69,10 @@ pub struct CameraState {
 impl CameraState {
     pub fn new() -> Self {
         Self {
-            pos: vec3::zero(),
+            pos: [0.; 3],
             pos_txt: ["".to_string(), "".to_string(), "".to_string()],
-            right: vec3::zero(),
-            up: vec3::zero(),
+            right: [0.; 3],
+            up: [0.; 3],
             right_txt: ["".to_string(), "".to_string(), "".to_string()],
             up_txt: ["".to_string(), "".to_string(), "".to_string()],
         }
@@ -83,18 +80,18 @@ impl CameraState {
 
     pub fn set_position(&mut self, pos: Vector3) {
         self.pos = pos;
-        self.pos_txt = vec3::map(pos, |v| format!("{:.3}", v));
+        self.pos_txt = vecmath_util::vec3_map(pos, |v| format!("{:.3}", v));
     }
 
     pub fn set_posture(&mut self, right: Vector3, up: Vector3) {
-        self.right = vec3::normalized(right);
-        self.up = vec3::normalized(up);
-        self.right_txt = vec3::map(self.right, |v| format!("{:.3}", v));
-        self.up_txt = vec3::map(self.up, |v| format!("{:.3}", v));
+        self.right = vecmath::vec3_normalized(right);
+        self.up = vecmath::vec3_normalized(up);
+        self.right_txt = vecmath_util::vec3_map(self.right, |v| format!("{:.3}", v));
+        self.up_txt = vecmath_util::vec3_map(self.up, |v| format!("{:.3}", v));
     }
 
     pub fn forward(&self) -> Vector3 {
-        vec3::cross(self.right, self.up)
+        vecmath::vec3_cross(self.right, self.up)
     }
 
     pub fn orthogonal(&self) -> Matrix4 {
@@ -106,7 +103,12 @@ impl CameraState {
             [r[0], u[0], f[0], 0.],
             [r[1], u[1], f[1], 0.],
             [r[2], u[2], f[2], 0.],
-            [-vec3::dot(r, p), -vec3::dot(u, p), -vec3::dot(f, p), 1.],
+            [
+                -vecmath::vec3_dot(r, p),
+                -vecmath::vec3_dot(u, p),
+                -vecmath::vec3_dot(f, p),
+                1.,
+            ],
         ]
     }
 }
@@ -123,10 +125,10 @@ pub struct SliceState {
 impl SliceState {
     pub fn new() -> Self {
         Self {
-            pos: vec3::zero(),
+            pos: [0.; 3],
             pos_txt: ["".to_string(), "".to_string(), "".to_string()],
-            right: vec3::zero(),
-            up: vec3::zero(),
+            right: [0.; 3],
+            up: [0.; 3],
             right_txt: ["".to_string(), "".to_string(), "".to_string()],
             up_txt: ["".to_string(), "".to_string(), "".to_string()],
         }
@@ -134,32 +136,32 @@ impl SliceState {
 
     pub fn set_position(&mut self, pos: Vector3) {
         self.pos = pos;
-        self.pos_txt = vec3::map(pos, |v| format!("{:.3}", v));
+        self.pos_txt = vecmath_util::vec3_map(pos, |v| format!("{:.3}", v));
     }
 
     pub fn set_posture(&mut self, right: Vector3, up: Vector3) {
-        self.right = vec3::normalized(right);
-        self.up = vec3::normalized(up);
-        self.right_txt = vec3::map(self.right, |v| format!("{:.3}", v));
-        self.up_txt = vec3::map(self.up, |v| format!("{:.3}", v));
+        self.right = vecmath::vec3_normalized(right);
+        self.up = vecmath::vec3_normalized(up);
+        self.right_txt = vecmath_util::vec3_map(self.right, |v| format!("{:.3}", v));
+        self.up_txt = vecmath_util::vec3_map(self.up, |v| format!("{:.3}", v));
     }
 }
 
-pub struct CameraControlTab {
+pub struct ControlTab {
     camera_enabled: bool,
     pub(crate) camera_state: CameraState,
     pub(crate) slice_state: SliceState,
-    move_xy: Vector2<f64>,
-    move_z: f64,
+    move_xz: vecmath::Vector2<f64>,
+    move_y: f64,
     move_speed: f64,
-    rot_pitch_yaw: Vector2<f64>,
+    rot_pitch_yaw: vecmath::Vector2<f64>,
     rot_roll: f64,
     release_mouse_left: bool,
     to_cnt: Sender<UICommand>,
     ids: Ids,
 }
 
-impl CameraControlTab {
+impl ControlTab {
     pub fn new(to_cnt: Sender<UICommand>, ui: &mut conrod_core::Ui) -> Self {
         let mut ids = Ids::new(ui.widget_id_generator());
         ids.position_textbox
@@ -172,14 +174,14 @@ impl CameraControlTab {
             .resize(3, &mut ui.widget_id_generator());
         ids.posture_textbox.resize(9, &mut ui.widget_id_generator());
 
-        CameraControlTab {
+        ControlTab {
             camera_enabled: true,
             camera_state: CameraState::new(),
             slice_state: SliceState::new(),
-            move_xy: vec2::zero(),
-            move_z: 0.,
+            move_xz: [0.; 2],
+            move_y: 0.,
             move_speed: 10.,
-            rot_pitch_yaw: vec2::zero(),
+            rot_pitch_yaw: [0.; 2],
             rot_roll: 0.,
             release_mouse_left: false,
             to_cnt,
@@ -254,20 +256,20 @@ impl CameraControlTab {
         {
             widget::Circle::fill(CONTROL_GRIP_SIZE)
                 .color(color::GRAY)
-                .x_y_relative_to(ids.z_pad, 0., self.move_z * CONTROL_PAD_SIZE)
+                .x_y_relative_to(ids.z_pad, 0., self.move_y * CONTROL_PAD_SIZE)
                 .set(ids.z_grip, ui);
 
             let grip_z_range = 1.0;
-            for (_, y) in widget::XYPad::new(
+            if let Some((_, y)) = widget::XYPad::new(
                 0.,
                 0.,
                 0.,
-                self.move_z,
+                self.move_y,
                 -grip_z_range / 2.0,
                 grip_z_range / 2.0,
             )
             .color(color::ALPHA)
-            .label("\n\nZ")
+            .label(if self.camera_enabled { "" } else { "\n\nY" })
             .label_color(color::GRAY)
             .line_thickness(0.)
             .value_font_size(0)
@@ -276,30 +278,30 @@ impl CameraControlTab {
             .right_from(ids.xy_pad, MARGIN)
             .set(ids.z_pad, ui)
             {
-                self.move_z = y;
+                self.move_y = y;
             }
 
             widget::Circle::fill(CONTROL_GRIP_SIZE)
                 .color(color::GRAY)
                 .x_y_relative_to(
                     ids.xy_pad,
-                    self.move_xy[0] * CONTROL_PAD_SIZE,
-                    self.move_xy[1] * CONTROL_PAD_SIZE,
+                    self.move_xz[0] * CONTROL_PAD_SIZE,
+                    self.move_xz[1] * CONTROL_PAD_SIZE,
                 )
                 .set(ids.xy_grip, ui);
 
             let grip_x_range = 1.0;
             let grip_y_range = 1.0;
-            for (x, y) in widget::XYPad::new(
-                self.move_xy[0],
+            if let Some((x, y)) = widget::XYPad::new(
+                self.move_xz[0],
                 -grip_x_range / 2.0,
                 grip_x_range / 2.0,
-                self.move_xy[1],
+                self.move_xz[1],
                 -grip_y_range / 2.0,
                 grip_y_range / 2.0,
             )
             .color(color::ALPHA)
-            .label("\n\nXY")
+            .label(if self.camera_enabled { "" } else { "\n\nXZ" })
             .label_color(color::GRAY)
             .line_thickness(0.)
             .value_font_size(0)
@@ -307,7 +309,7 @@ impl CameraControlTab {
             .down_from(ids.position_title, MARGIN)
             .set(ids.xy_pad, ui)
             {
-                self.move_xy = [x, y];
+                self.move_xz = [x, y];
             }
         }
 
@@ -342,8 +344,24 @@ impl CameraControlTab {
                 {
                     if let Event::Update(txt) = e {
                         if self.camera_enabled {
+                            if let Ok(v) = txt.parse() {
+                                self.camera_state.pos[i] = v;
+                                self.to_cnt
+                                    .send(UICommand::CameraMoveTo(self.camera_state.pos))
+                                    .unwrap()
+                            }
                             self.camera_state.pos_txt[i] = txt;
                         } else {
+                            if let Ok(v) = txt.parse() {
+                                let old = self.slice_state.pos;
+                                self.slice_state.pos[i] = v;
+                                self.to_cnt
+                                    .send(UICommand::SliceMove(vecmath::vec3_sub(
+                                        self.slice_state.pos,
+                                        old,
+                                    )))
+                                    .unwrap()
+                            }
                             self.slice_state.pos_txt[i] = txt;
                         }
                     }
@@ -366,48 +384,9 @@ impl CameraControlTab {
                 .left_justify()
                 .set(ids.move_speed, ui)
             {
-                match txt {
-                    Event::Update(s) => {
-                        if let Ok(f) = s.parse() {
-                            self.move_speed = f
-                        }
-                    }
-                    _ => (),
-                }
-            }
-        }
-
-        // Update Position Button
-        {
-            for _ in widget::Button::new()
-                .label("Update position")
-                .right_from(ids.z_pad, CONTROL_PAD_SIZE + MARGIN)
-                .down_from(ids.position_textbox[2], MARGIN)
-                .w_h(140.0, 40.)
-                .set(ids.update_position_button, ui)
-            {
-                if self.camera_enabled {
-                    let pos_txt = &self.camera_state.pos_txt;
-                    match (pos_txt[0].parse(), pos_txt[1].parse(), pos_txt[2].parse()) {
-                        (Ok(x), Ok(y), Ok(z)) => {
-                            self.camera_state.pos = [x, y, z];
-                            self.to_cnt
-                                .send(UICommand::CameraMoveTo(self.camera_state.pos))
-                                .unwrap()
-                        }
-                        _ => (),
-                    }
-                } else {
-                    let pos_txt = &self.slice_state.pos_txt;
-                    match (pos_txt[0].parse(), pos_txt[1].parse(), pos_txt[2].parse()) {
-                        (Ok(x), Ok(y), Ok(z)) => {
-                            let old = self.slice_state.pos;
-                            self.slice_state.pos = [x, y, z];
-                            self.to_cnt
-                                .send(UICommand::SliceMove(vec3::sub(self.slice_state.pos, old)))
-                                .unwrap()
-                        }
-                        _ => (),
+                if let Event::Update(s) = txt {
+                    if let Ok(f) = s.parse() {
+                        self.move_speed = f;
                     }
                 }
             }
@@ -417,7 +396,7 @@ impl CameraControlTab {
         {
             for _ in widget::Button::new()
                 .label("Auto View")
-                .right_from(ids.update_position_button, MARGIN)
+                .right_from(ids.z_pad, CONTROL_PAD_SIZE + MARGIN)
                 .down_from(ids.position_textbox[2], MARGIN)
                 .w_h(120.0, 40.)
                 .set(ids.auto_view_button, ui)
@@ -428,10 +407,13 @@ impl CameraControlTab {
                 self.to_cnt
                     .send(UICommand::CameraSetPosture { right, up })
                     .unwrap();
-                let forward = vec3::cross(self.slice_state.right, self.slice_state.up);
-                let d = vec3::mul(forward, 250.);
+                let forward = vecmath::vec3_cross(self.slice_state.right, self.slice_state.up);
+                let d = vecmath::vec3_scale(forward, 250.);
                 self.to_cnt
-                    .send(UICommand::CameraMoveTo(vec3::add(self.slice_state.pos, d)))
+                    .send(UICommand::CameraMoveTo(vecmath::vec3_add(
+                        self.slice_state.pos,
+                        d,
+                    )))
                     .unwrap();
                 self.to_cnt.send(UICommand::CameraUpdate).unwrap();
             }
@@ -443,23 +425,29 @@ impl CameraControlTab {
             .set(ids.sep[1], ui);
 
         if self.release_mouse_left {
-            self.move_xy = vec2::zero();
-            self.move_z = 0.;
+            self.move_xz = [0.; 2];
+            self.move_y = 0.;
         }
-        if !vec2::is_zero(self.move_xy) || self.move_z != 0.0 {
+        if !vecmath_util::is_zero(&self.move_xz) || self.move_y != 0.0 {
             if self.camera_enabled {
-                let t = vec3::mul(vec2::to_vec3(self.move_xy, -self.move_z), self.move_speed);
+                let t = vecmath::vec3_scale(
+                    [self.move_xz[0], self.move_xz[1], self.move_y],
+                    self.move_speed,
+                );
                 self.to_cnt.send(UICommand::CameraMove(t)).unwrap();
-                let t = vec3::cast(t);
-                self.camera_state.set_position(vec3::add(
-                    self.camera_state.pos,
-                    mat4::mul_vec3(self.camera_state.orthogonal(), t),
-                ));
+                let t = vecmath::vec3_cast(t);
+                let mut t = vecmath_util::mat4_transform_vec3(self.camera_state.orthogonal(), t);
+                t[2] *= -1.0;
+                self.camera_state
+                    .set_position(vecmath::vec3_add(self.camera_state.pos, t));
             } else {
-                let t = vec3::mul(vec2::to_vec3(self.move_xy, self.move_z), self.move_speed);
-                let t = vec3::cast(t);
+                let t = vecmath::vec3_scale(
+                    [self.move_xz[0], self.move_y, self.move_xz[1]],
+                    self.move_speed,
+                );
+                let t = vecmath::vec3_cast(t);
                 self.to_cnt.send(UICommand::SliceMove(t)).unwrap();
-                let pos = vec3::add(self.slice_state.pos, t);
+                let pos = vecmath::vec3_add(self.slice_state.pos, t);
                 self.slice_state.set_position(pos);
             };
         }
@@ -483,7 +471,7 @@ impl CameraControlTab {
                 .x_y_relative_to(ids.roll_pad, self.rot_roll * CONTROL_PAD_SIZE, 0.)
                 .set(ids.roll_grip, ui);
             let grip_roll_range = 1.0;
-            for (x, _) in widget::XYPad::new(
+            if let Some((x, _)) = widget::XYPad::new(
                 self.rot_roll,
                 -grip_roll_range / 2.0,
                 grip_roll_range / 2.0,
@@ -513,7 +501,7 @@ impl CameraControlTab {
                 .set(ids.pitch_yaw_grip, ui);
             let ball_x_range = 1.0;
             let ball_y_range = 1.0;
-            for (x, y) in widget::XYPad::new(
+            if let Some((x, y)) = widget::XYPad::new(
                 self.rot_pitch_yaw[0],
                 -ball_x_range / 2.0,
                 ball_x_range / 2.0,
@@ -596,19 +584,19 @@ impl CameraControlTab {
         }
 
         if self.release_mouse_left {
-            self.rot_pitch_yaw = vec2::zero();
+            self.rot_pitch_yaw = [0.; 2];
             self.rot_roll = 0.;
         }
-        if !vec2::is_zero(self.rot_pitch_yaw) || self.rot_roll != 0.0 {
+        if !vecmath_util::is_zero(&self.rot_pitch_yaw) || self.rot_roll != 0.0 {
             if self.camera_enabled {
                 let axis = [
                     self.rot_pitch_yaw[1],
                     -self.rot_pitch_yaw[0],
                     -self.rot_roll,
                 ];
-                let axis = vec3::cast(axis);
+                let axis = vecmath::vec3_cast(axis);
                 self.to_cnt.send(UICommand::CameraRotate(axis)).unwrap();
-                let axis = mat4::mul_vec3(self.camera_state.orthogonal(), axis);
+                let axis = vecmath_util::mat4_transform_vec3(self.camera_state.orthogonal(), axis);
                 let rot = quaternion::axis_angle(axis, 0.01);
                 let right = quaternion::rotate_vector(rot, self.camera_state.right);
                 let up = quaternion::rotate_vector(rot, self.camera_state.up);
@@ -619,7 +607,7 @@ impl CameraControlTab {
                     self.rot_pitch_yaw[0],
                     -self.rot_roll,
                 ];
-                let axis = vec3::cast(axis);
+                let axis = vecmath::vec3_cast(axis);
                 self.to_cnt.send(UICommand::SliceRotate(axis)).unwrap();
                 let rot = quaternion::axis_angle(axis, 0.01);
                 let right = quaternion::rotate_vector(rot, self.slice_state.right);

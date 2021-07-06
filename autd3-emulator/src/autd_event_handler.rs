@@ -4,7 +4,7 @@
  * Created Date: 01/05/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 12/05/2020
+ * Last Modified: 06/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -13,13 +13,12 @@
 
 use acoustic_field_viewer::sound_source::SoundSource;
 use acoustic_field_viewer::view::UpdateHandler;
-use vecmath_utils::vec3;
 
 use std::f32::consts::PI;
 use std::sync::mpsc;
 
-use crate::consts::{NUM_TRANS_X, NUM_TRANS_Y, TRANS_SIZE};
 use crate::parser::{AUTDData, Geometry};
+use autd3_core::hardware_defined::{NUM_TRANS_X, NUM_TRANS_Y, TRANS_SPACING_MM};
 
 pub struct AUTDEventHandler {
     rx_from_autd: mpsc::Receiver<Vec<u8>>,
@@ -30,24 +29,20 @@ impl AUTDEventHandler {
         AUTDEventHandler { rx_from_autd }
     }
 
-    fn is_missing_transducer(x: usize, y: usize) -> bool {
-        y == 1 && (x == 1 || x == 2 || x == 16)
-    }
-
     fn make_autd_transducers(geo: Geometry) -> Vec<SoundSource> {
         let mut transducers = Vec::new();
         for y in 0..NUM_TRANS_Y {
             for x in 0..NUM_TRANS_X {
-                if Self::is_missing_transducer(x, y) {
+                if autd3_core::hardware_defined::is_missing_transducer(x, y) {
                     continue;
                 }
-                let x_dir = vec3::mul(geo.right, TRANS_SIZE * x as f32);
-                let y_dir = vec3::mul(geo.up, TRANS_SIZE * y as f32);
-                let zdir = vec3::cross(geo.right, geo.up);
+                let x_dir = vecmath::vec3_scale(geo.right, TRANS_SPACING_MM as f32 * x as f32);
+                let y_dir = vecmath::vec3_scale(geo.up, TRANS_SPACING_MM as f32 * y as f32);
+                let zdir = vecmath::vec3_cross(geo.right, geo.up);
                 let pos = geo.origin;
-                let pos = vec3::add(pos, x_dir);
-                let pos = vec3::add(pos, y_dir);
-                transducers.push(SoundSource::new(pos, zdir, PI));
+                let pos = vecmath::vec3_add(pos, x_dir);
+                let pos = vecmath::vec3_add(pos, y_dir);
+                transducers.push(SoundSource::new(pos, zdir, 0.0, 0.0));
             }
         }
         transducers
@@ -59,6 +54,7 @@ impl AUTDEventHandler {
             for d in data {
                 match d {
                     AUTDData::Geometries(geometries) => {
+                        update_handler.sources.borrow_mut().clear();
                         for geometry in geometries {
                             let transducers = Self::make_autd_transducers(geometry);
                             for trans in transducers {
@@ -66,23 +62,27 @@ impl AUTDEventHandler {
                             }
                         }
                         update_handler.update_position();
-                        update_handler.update_phase();
+                        update_handler.update_drive();
                     }
                     AUTDData::Gain(gain) => {
-                        for (&phase, source) in gain
+                        for ((&phase, &amp), source) in gain
                             .phases
                             .iter()
+                            .zip(gain.amps.iter())
                             .zip(update_handler.sources.borrow_mut().iter_mut())
                         {
+                            source.amp = (amp as f32 / 510.0 * std::f32::consts::PI).sin();
                             source.phase = 2.0 * PI * (1.0 - (phase as f32 / 255.0));
                         }
-                        update_handler.update_phase();
+                        update_handler.update_drive();
                     }
                     AUTDData::Clear => {
-                        update_handler.sources.borrow_mut().clear();
-                        update_handler.update_position();
-                        update_handler.update_phase();
+                        for source in update_handler.sources.borrow_mut().iter_mut() {
+                            source.phase = 0.;
+                        }
                     }
+                    AUTDData::Pause => {}
+                    AUTDData::Resume => {}
                     _ => (),
                 }
             }

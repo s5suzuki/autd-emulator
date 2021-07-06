@@ -4,7 +4,7 @@
  * Created Date: 01/05/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 12/05/2020
+ * Last Modified: 05/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -14,7 +14,6 @@
 use crate::Vector3;
 use acoustic_field_viewer::view::event::*;
 use acoustic_field_viewer::view::UpdateHandler;
-use vecmath_utils::vec3;
 
 use crate::camera_helper;
 use crate::ui::UICommand;
@@ -50,7 +49,9 @@ impl ViewController {
 
         if let Ok(d) = self.from_ui.try_recv() {
             match d {
-                UICommand::CameraMove(t) => Self::camera_move(update_handler, vec3::cast(t)),
+                UICommand::CameraMove(t) => {
+                    Self::camera_move(update_handler, vecmath::vec3_cast(t))
+                }
                 UICommand::CameraMoveTo(t) => Self::camera_move_to(update_handler, t),
                 UICommand::CameraRotate(t) => Self::camera_rotate(update_handler, t),
                 UICommand::CameraSetPosture { right, up } => {
@@ -109,7 +110,7 @@ impl ViewController {
     pub fn camera_set_posture(update_handler: &mut UpdateHandler, right: Vector3, up: Vector3) {
         update_handler.camera.right = right;
         update_handler.camera.up = up;
-        update_handler.camera.forward = vec3::cross(right, up);
+        update_handler.camera.forward = vecmath::vec3_cross(right, up);
         update_handler.update_camera_pos();
     }
 

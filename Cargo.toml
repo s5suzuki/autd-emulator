@@ -1,19 +1,7 @@
-[package]
-name = "autd-emulator"
-version = "0.0.1"
-authors = ["shun suzuki <suzuki@hapis.k.u-tokyo.ac.jp>"]
-edition = "2018"
+[workspace]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies]
-acoustic_field_viewer = {git = "https://github.com/sssssssuzuki/acoustic_field_viewer.git", rev="dev", version="0.0.10"}
-scarlet = "1.1.0"
-piston_window = "0.89.0"
-conrod = "0.61.1"
-conrod_core = "0.69.0"
-conrod_piston = "0.69.0"
-find_folder = "0.3.0"
-camera_controllers = "0.31.0"
-quaternion = "0.4.1"
-vecmath_utils = {git = "https://github.com/sssssssuzuki/vecmath_utils.git", version="0.0.16"}
+members = [
+    "acoustic_field_viewer",
+    "autd3-emulator",
+    "vecmath_util"
+]
