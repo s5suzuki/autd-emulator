@@ -8,6 +8,12 @@
 cargo run --release
 ```
 
+# Limitations
+
+* `Modulation` and `Sequence` are not supported, currently
+* `silent`, `output enable`, and `output delay` options do not have any effect
+* Only tested on Windows
+
 # Author
 
 Suzuki Shun, 2020-2021
