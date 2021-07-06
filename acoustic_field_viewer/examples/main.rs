@@ -28,6 +28,11 @@ pub fn main() {
     const TRANS_SIZE: f32 = 10.16;
     const WAVE_LENGTH: f32 = 8.5;
 
+    const VIEW_SLICE_WIDTH: i32 = 400;
+    const VIEW_SLICE_HEIGHT: i32 = 300;
+    const WINDOW_WIDTH: u32 = 640;
+    const WINDOW_HEIGHT: u32 = 480;
+
     let mut focal_pos = [TRANS_SIZE * 8.5, TRANS_SIZE * 6.5, 150.];
 
     let mut transducers = Vec::new();
@@ -44,15 +49,17 @@ pub fn main() {
 
     let mut settings = ViewerSettings::new(
         40e3,
+        WAVE_LENGTH,
         TRANS_SIZE,
         coloring_hsv,
         scarlet::colormap::ListedColorMap::inferno(),
+        (VIEW_SLICE_WIDTH, VIEW_SLICE_HEIGHT),
     );
     settings.color_scale = 0.6;
     settings.slice_alpha = 0.95;
 
     let source_viewer = SoundSourceViewer::new();
-    let mut acoustic_field_viewer = AcousticFiledSliceViewer::new();
+    let mut acoustic_field_viewer = AcousticFiledSliceViewer::new(vecmath_util::mat4_scale(1.0));
     acoustic_field_viewer.translate(focal_pos);
     acoustic_field_viewer.set_posture([1., 0., 0.], [0., 0., 1.]);
 
@@ -131,8 +138,13 @@ pub fn main() {
         }
     };
 
-    let (mut window_view, mut window) =
-        ViewWindow::new(transducers, source_viewer, acoustic_field_viewer, settings);
+    let (mut window_view, mut window) = ViewWindow::new(
+        transducers,
+        source_viewer,
+        acoustic_field_viewer,
+        settings,
+        [WINDOW_WIDTH, WINDOW_HEIGHT],
+    );
     window_view.update = Some(update);
 
     while let Some(e) = window.next() {

@@ -1,10 +1,10 @@
 /*
- * File: camera_control_tab.rs
+ * File: control_tab.rs
  * Project: ui
  * Created Date: 02/05/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 05/07/2021
+ * Last Modified: 06/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -41,7 +41,6 @@ widget_ids! {
         move_speed,
         position_label[],
         position_textbox[],
-        update_position_button,
         auto_view_button,
 
         rotation_title,
@@ -148,12 +147,12 @@ impl SliceState {
     }
 }
 
-pub struct CameraControlTab {
+pub struct ControlTab {
     camera_enabled: bool,
     pub(crate) camera_state: CameraState,
     pub(crate) slice_state: SliceState,
-    move_xy: vecmath::Vector2<f64>,
-    move_z: f64,
+    move_xz: vecmath::Vector2<f64>,
+    move_y: f64,
     move_speed: f64,
     rot_pitch_yaw: vecmath::Vector2<f64>,
     rot_roll: f64,
@@ -162,7 +161,7 @@ pub struct CameraControlTab {
     ids: Ids,
 }
 
-impl CameraControlTab {
+impl ControlTab {
     pub fn new(to_cnt: Sender<UICommand>, ui: &mut conrod_core::Ui) -> Self {
         let mut ids = Ids::new(ui.widget_id_generator());
         ids.position_textbox
@@ -175,12 +174,12 @@ impl CameraControlTab {
             .resize(3, &mut ui.widget_id_generator());
         ids.posture_textbox.resize(9, &mut ui.widget_id_generator());
 
-        CameraControlTab {
+        ControlTab {
             camera_enabled: true,
             camera_state: CameraState::new(),
             slice_state: SliceState::new(),
-            move_xy: [0.; 2],
-            move_z: 0.,
+            move_xz: [0.; 2],
+            move_y: 0.,
             move_speed: 10.,
             rot_pitch_yaw: [0.; 2],
             rot_roll: 0.,
@@ -257,7 +256,7 @@ impl CameraControlTab {
         {
             widget::Circle::fill(CONTROL_GRIP_SIZE)
                 .color(color::GRAY)
-                .x_y_relative_to(ids.z_pad, 0., self.move_z * CONTROL_PAD_SIZE)
+                .x_y_relative_to(ids.z_pad, 0., self.move_y * CONTROL_PAD_SIZE)
                 .set(ids.z_grip, ui);
 
             let grip_z_range = 1.0;
@@ -265,12 +264,12 @@ impl CameraControlTab {
                 0.,
                 0.,
                 0.,
-                self.move_z,
+                self.move_y,
                 -grip_z_range / 2.0,
                 grip_z_range / 2.0,
             )
             .color(color::ALPHA)
-            .label("\n\nZ")
+            .label(if self.camera_enabled { "" } else { "\n\nY" })
             .label_color(color::GRAY)
             .line_thickness(0.)
             .value_font_size(0)
@@ -279,30 +278,30 @@ impl CameraControlTab {
             .right_from(ids.xy_pad, MARGIN)
             .set(ids.z_pad, ui)
             {
-                self.move_z = y;
+                self.move_y = y;
             }
 
             widget::Circle::fill(CONTROL_GRIP_SIZE)
                 .color(color::GRAY)
                 .x_y_relative_to(
                     ids.xy_pad,
-                    self.move_xy[0] * CONTROL_PAD_SIZE,
-                    self.move_xy[1] * CONTROL_PAD_SIZE,
+                    self.move_xz[0] * CONTROL_PAD_SIZE,
+                    self.move_xz[1] * CONTROL_PAD_SIZE,
                 )
                 .set(ids.xy_grip, ui);
 
             let grip_x_range = 1.0;
             let grip_y_range = 1.0;
             if let Some((x, y)) = widget::XYPad::new(
-                self.move_xy[0],
+                self.move_xz[0],
                 -grip_x_range / 2.0,
                 grip_x_range / 2.0,
-                self.move_xy[1],
+                self.move_xz[1],
                 -grip_y_range / 2.0,
                 grip_y_range / 2.0,
             )
             .color(color::ALPHA)
-            .label("\n\nXY")
+            .label(if self.camera_enabled { "" } else { "\n\nXZ" })
             .label_color(color::GRAY)
             .line_thickness(0.)
             .value_font_size(0)
@@ -310,7 +309,7 @@ impl CameraControlTab {
             .down_from(ids.position_title, MARGIN)
             .set(ids.xy_pad, ui)
             {
-                self.move_xy = [x, y];
+                self.move_xz = [x, y];
             }
         }
 
@@ -345,8 +344,24 @@ impl CameraControlTab {
                 {
                     if let Event::Update(txt) = e {
                         if self.camera_enabled {
+                            if let Ok(v) = txt.parse() {
+                                self.camera_state.pos[i] = v;
+                                self.to_cnt
+                                    .send(UICommand::CameraMoveTo(self.camera_state.pos))
+                                    .unwrap()
+                            }
                             self.camera_state.pos_txt[i] = txt;
                         } else {
+                            if let Ok(v) = txt.parse() {
+                                let old = self.slice_state.pos;
+                                self.slice_state.pos[i] = v;
+                                self.to_cnt
+                                    .send(UICommand::SliceMove(vecmath::vec3_sub(
+                                        self.slice_state.pos,
+                                        old,
+                                    )))
+                                    .unwrap()
+                            }
                             self.slice_state.pos_txt[i] = txt;
                         }
                     }
@@ -377,48 +392,11 @@ impl CameraControlTab {
             }
         }
 
-        // Update Position Button
-        {
-            for _ in widget::Button::new()
-                .label("Update position")
-                .right_from(ids.z_pad, CONTROL_PAD_SIZE + MARGIN)
-                .down_from(ids.position_textbox[2], MARGIN)
-                .w_h(140.0, 40.)
-                .set(ids.update_position_button, ui)
-            {
-                if self.camera_enabled {
-                    let pos_txt = &self.camera_state.pos_txt;
-                    if let (Ok(x), Ok(y), Ok(z)) =
-                        (pos_txt[0].parse(), pos_txt[1].parse(), pos_txt[2].parse())
-                    {
-                        self.camera_state.pos = [x, y, z];
-                        self.to_cnt
-                            .send(UICommand::CameraMoveTo(self.camera_state.pos))
-                            .unwrap()
-                    }
-                } else {
-                    let pos_txt = &self.slice_state.pos_txt;
-                    if let (Ok(x), Ok(y), Ok(z)) =
-                        (pos_txt[0].parse(), pos_txt[1].parse(), pos_txt[2].parse())
-                    {
-                        let old = self.slice_state.pos;
-                        self.slice_state.pos = [x, y, z];
-                        self.to_cnt
-                            .send(UICommand::SliceMove(vecmath::vec3_sub(
-                                self.slice_state.pos,
-                                old,
-                            )))
-                            .unwrap()
-                    }
-                }
-            }
-        }
-
         // Auto View
         {
             for _ in widget::Button::new()
                 .label("Auto View")
-                .right_from(ids.update_position_button, MARGIN)
+                .right_from(ids.z_pad, CONTROL_PAD_SIZE + MARGIN)
                 .down_from(ids.position_textbox[2], MARGIN)
                 .w_h(120.0, 40.)
                 .set(ids.auto_view_button, ui)
@@ -447,24 +425,24 @@ impl CameraControlTab {
             .set(ids.sep[1], ui);
 
         if self.release_mouse_left {
-            self.move_xy = [0.; 2];
-            self.move_z = 0.;
+            self.move_xz = [0.; 2];
+            self.move_y = 0.;
         }
-        if !vecmath_util::is_zero(&self.move_xy) || self.move_z != 0.0 {
+        if !vecmath_util::is_zero(&self.move_xz) || self.move_y != 0.0 {
             if self.camera_enabled {
                 let t = vecmath::vec3_scale(
-                    [self.move_xy[0], self.move_xy[1], -self.move_z],
+                    [self.move_xz[0], self.move_xz[1], self.move_y],
                     self.move_speed,
                 );
                 self.to_cnt.send(UICommand::CameraMove(t)).unwrap();
                 let t = vecmath::vec3_cast(t);
-                self.camera_state.set_position(vecmath::vec3_add(
-                    self.camera_state.pos,
-                    vecmath_util::mat4_transform_vec3(self.camera_state.orthogonal(), t),
-                ));
+                let mut t = vecmath_util::mat4_transform_vec3(self.camera_state.orthogonal(), t);
+                t[2] *= -1.0;
+                self.camera_state
+                    .set_position(vecmath::vec3_add(self.camera_state.pos, t));
             } else {
                 let t = vecmath::vec3_scale(
-                    [self.move_xy[0], self.move_xy[1], self.move_z],
+                    [self.move_xz[0], self.move_y, self.move_xz[1]],
                     self.move_speed,
                 );
                 let t = vecmath::vec3_cast(t);

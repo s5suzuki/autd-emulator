@@ -104,14 +104,15 @@ impl<F> ViewWindow<F>
 where
     F: FnMut(&mut UpdateHandler, Option<Button>),
 {
-    pub fn new(
+    pub fn new<S: Into<Size>>(
         sources: Vec<SoundSource>,
         sound_source_viewer: SoundSourceViewer,
         field_slice_viewer: AcousticFiledSliceViewer,
         settings: ViewerSettings,
+        size: S,
     ) -> (ViewWindow<F>, PistonWindow) {
         let opengl = OpenGL::V4_5;
-        let mut window: PistonWindow = WindowSettings::new("", [640, 480])
+        let mut window: PistonWindow = WindowSettings::new("", size)
             .exit_on_esc(true)
             .samples(4)
             .graphics_api(opengl)
@@ -191,5 +192,9 @@ where
             aspect_ratio: (draw_size.width as f32) / (draw_size.height as f32),
         }
         .projection()
+    }
+
+    pub fn get_slice_model(&self) -> Matrix4 {
+        self.update_handler.field_slice_viewer.model()
     }
 }

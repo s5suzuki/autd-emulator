@@ -33,11 +33,11 @@ use shader_version::{glsl::GLSL, Shaders};
 use crate::{sound_source::SoundSource, view::ViewerSettings, Matrix4, Vector3};
 
 gfx_vertex_struct!(Vertex {
-    a_pos: [i8; 4] = "a_pos",
+    a_pos: [i16; 4] = "a_pos",
 });
 
 impl Vertex {
-    fn new(pos: [i8; 3]) -> Vertex {
+    fn new(pos: [i16; 3]) -> Vertex {
         Vertex {
             a_pos: [pos[0], pos[1], pos[2], 1],
         }
@@ -59,6 +59,7 @@ gfx_pipeline!( pipe {
     u_model: Global<[[f32; 4]; 4]> = "u_model",
     u_trans_size : Global<f32> = "u_trans_size",
     u_color_scale : Global<f32> = "u_color_scale",
+    u_wavenum : Global<f32> = "u_wavenum",
     u_color_map: TextureSampler<[f32; 4]> = "u_color_map",
     u_trans_num : Global<f32> = "u_trans_num",
     u_trans_pos: TextureSampler<[f32; 4]> = "u_trans_pos",
@@ -81,12 +82,12 @@ pub struct AcousticFiledSliceViewer {
 }
 
 impl AcousticFiledSliceViewer {
-    pub fn new() -> AcousticFiledSliceViewer {
+    pub fn new(model: Matrix4) -> AcousticFiledSliceViewer {
         AcousticFiledSliceViewer {
             settings: Weak::new(),
             pipe_data: None,
             sources: Weak::new(),
-            model: vecmath_util::mat4_scale(100.),
+            model,
             pso_slice: None,
             position_updated: false,
             drive_updated: false,
@@ -97,11 +98,17 @@ impl AcousticFiledSliceViewer {
     pub fn render_setting(&mut self, window: &PistonWindow, opengl: OpenGL) {
         let factory = &mut window.factory.clone();
 
+        let (width, height) = self.settings.upgrade().unwrap().borrow().size;
+
+        let wl = (-width / 2).clamp(-32768, 0) as i16;
+        let wr = ((width + 1) / 2).clamp(0, 32767) as i16;
+        let hb = (-height / 2).clamp(-32768, 0) as i16;
+        let ht = ((height + 1) / 2).clamp(0, 32767) as i16;
         let vertex_data = vec![
-            Vertex::new([-1, -1, 0]),
-            Vertex::new([1, -1, 0]),
-            Vertex::new([1, 1, 0]),
-            Vertex::new([-1, 1, 0]),
+            Vertex::new([wl, hb, 0]),
+            Vertex::new([wr, hb, 0]),
+            Vertex::new([wr, ht, 0]),
+            Vertex::new([wl, ht, 0]),
         ];
         let index_data: &[u16] = &[0, 1, 2, 2, 3, 0];
         let (vertex_buffer, slice) =
@@ -146,14 +153,13 @@ impl AcousticFiledSliceViewer {
 
     pub fn set_posture(&mut self, right: Vector3, up: Vector3) {
         let forward = vecmath::vec3_cross(right, up);
-        let pos = self.model[3];
-        let model = [
-            vecmath::vec4_scale(vecmath_util::to_vec4(right), 100.0),
-            vecmath::vec4_scale(vecmath_util::to_vec4(up), 100.0),
-            vecmath::vec4_scale(vecmath_util::to_vec4(forward), 100.0),
-            pos,
-        ];
-        self.model = model;
+        self.model[0] = vecmath_util::to_vec4(right);
+        self.model[1] = vecmath_util::to_vec4(up);
+        self.model[2] = vecmath_util::to_vec4(forward);
+    }
+
+    pub fn model(&self) -> Matrix4 {
+        self.model
     }
 
     pub fn position(&self) -> Vector3 {
@@ -359,11 +365,13 @@ impl AcousticFiledSliceViewer {
         let sampler_info = SamplerInfo::new(FilterMethod::Scale, WrapMode::Tile);
         let len = self.sources.upgrade().unwrap().borrow().len();
         let source_size = self.settings.upgrade().unwrap().borrow().source_size;
+        let wave_length = self.settings.upgrade().unwrap().borrow().wave_length;
         self.pipe_data = Some(pipe::Data {
             vertex_buffer,
             u_model_view_proj: [[0.; 4]; 4],
             u_model: vecmath_util::mat4_scale(1.0),
             u_color_scale: 1.0,
+            u_wavenum: 2.0 * std::f32::consts::PI / wave_length,
             u_trans_size: source_size,
             u_trans_num: len as f32,
             u_color_map: (
@@ -433,11 +441,5 @@ impl AcousticFiledSliceViewer {
                 .unwrap(),
             slice,
         ));
-    }
-}
-
-impl Default for AcousticFiledSliceViewer {
-    fn default() -> Self {
-        Self::new()
     }
 }

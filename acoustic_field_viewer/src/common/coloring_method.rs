@@ -17,11 +17,6 @@ use super::color::HSV;
 pub type ColoringMethod = fn(f32, f32) -> [f32; 4];
 
 pub fn coloring_hsv(h: f32, v: f32) -> [f32; 4] {
-    let hsv = HSV {
-        h: h,
-        s: 1.,
-        v: v,
-        a: 1.,
-    };
+    let hsv = HSV { h, s: 1., v, a: 1. };
     hsv.rgba()
 }

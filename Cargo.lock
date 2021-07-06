@@ -108,7 +108,7 @@ dependencies = [
 
 [[package]]
 name = "autd-emulator"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "acoustic_field_viewer",
  "autd3-core",

@@ -3,6 +3,7 @@
 in vec3 v_gpos;
 out vec4 o_Color;
 
+uniform float u_wavenum;
 uniform float u_color_scale;
 uniform float u_trans_size;
 uniform float u_trans_num;
@@ -13,8 +14,6 @@ uniform sampler1D u_trans_pos_sub;
 uniform sampler1D u_trans_drive;
 
 const float PI = 3.141592653589793;
-const float WAVE_LENGTH = 8.5;
-const float WAVE_NUM = 2.0*PI/WAVE_LENGTH;
 
 vec4 coloring(float t)
 {
@@ -35,8 +34,8 @@ void main() {
         float p = 2.0*PI*texture(u_trans_drive, (idx+0.5) / u_trans_num).x;
         float amp = texture(u_trans_drive, (idx+0.5) / u_trans_num).y;
         float d = length(v_gpos - tp);
-        im += amp * cos(p - WAVE_NUM*d) / d;
-        re += amp * sin(p - WAVE_NUM*d) / d;
+        im += amp * cos(p - u_wavenum*d) / d;
+        re += amp * sin(p - u_wavenum*d) / d;
     }
     float c = sqrt(re*re+im*im);
     o_Color = coloring(c);

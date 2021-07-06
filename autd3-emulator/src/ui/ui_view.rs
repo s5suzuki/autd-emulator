@@ -4,7 +4,7 @@
  * Created Date: 01/05/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 05/07/2021
+ * Last Modified: 06/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -21,7 +21,7 @@ use piston_window::{PistonWindow, UpdateEvent, Window, WindowSettings};
 
 use std::sync::mpsc::{Receiver, Sender};
 
-use super::camera_control_tab::CameraControlTab;
+use super::control_tab::ControlTab;
 use crate::color;
 use crate::ui::UICommand;
 
@@ -37,13 +37,13 @@ widget_ids! {
 }
 
 pub struct App {
-    pub camera_tab: CameraControlTab,
+    pub camera_tab: ControlTab,
     pub from_cnt: Receiver<UICommand>,
     pub release_mouse_left: bool,
 }
 
 impl App {
-    pub fn new(camera_tab: CameraControlTab, from_cnt: Receiver<UICommand>) -> Self {
+    pub fn new(camera_tab: ControlTab, from_cnt: Receiver<UICommand>) -> Self {
         App {
             camera_tab,
             from_cnt,
@@ -80,7 +80,7 @@ pub fn gui(ui: &mut conrod_core::UiCell, ids: &Ids, app: &mut App) {
         .color(color::DARK)
         .set(ids.canvas, ui);
 
-    widget::tabs::Tabs::new(&[(app.camera_tab.ids().canvas, "Camera")])
+    widget::tabs::Tabs::new(&[(app.camera_tab.ids().canvas, "Controller")])
         .layout_horizontally()
         .wh_of(ids.canvas)
         .color(color::DARK)
@@ -155,7 +155,7 @@ impl<'a> UiView<'a> {
         let ids = Ids::new(ui.widget_id_generator());
 
         let image_map = conrod_core::image::Map::new();
-        let camera_tab = CameraControlTab::new(to_cnt, &mut ui);
+        let camera_tab = ControlTab::new(to_cnt, &mut ui);
         let app = App::new(camera_tab, from_cnt);
 
         (
