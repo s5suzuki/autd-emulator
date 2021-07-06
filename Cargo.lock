@@ -129,7 +129,8 @@ dependencies = [
 [[package]]
 name = "autd3-core"
 version = "1.5.0"
-source = "git+https://github.com/shinolab/rust-autd.git?branch=dev#5b43dce4bce46bcd0a2c8ebbeefd90ae971033c8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ae57d49496b6892c4764f37f62369c687dfb342b67fd0fabfff3151aae093ef0"
 dependencies = [
  "anyhow",
  "bitflags",
