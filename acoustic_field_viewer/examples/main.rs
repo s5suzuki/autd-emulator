@@ -4,7 +4,7 @@
  * Created Date: 27/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 05/07/2021
+ * Last Modified: 06/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -38,7 +38,7 @@ pub fn main() {
             let d = vecmath_util::dist(pos, focal_pos);
             let phase = (d % WAVE_LENGTH) / WAVE_LENGTH;
             let phase = 2.0 * PI * phase;
-            transducers.push(SoundSource::new(pos, zdir, phase));
+            transducers.push(SoundSource::new(pos, zdir, 1.0, phase));
         }
     }
 
@@ -109,7 +109,7 @@ pub fn main() {
 
                     source.phase = phase;
                 }
-                update_handler.update_phase();
+                update_handler.update_drive();
             }
             Some(Button::Keyboard(Key::F)) => {
                 focal_pos = vecmath::vec3_add(focal_pos, [-travel, 0., 0.]);
@@ -125,7 +125,7 @@ pub fn main() {
 
                     source.phase = phase;
                 }
-                update_handler.update_phase();
+                update_handler.update_drive();
             }
             _ => (),
         }

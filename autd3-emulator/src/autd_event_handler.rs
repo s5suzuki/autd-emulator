@@ -4,7 +4,7 @@
  * Created Date: 01/05/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 05/07/2021
+ * Last Modified: 06/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -42,7 +42,7 @@ impl AUTDEventHandler {
                 let pos = geo.origin;
                 let pos = vecmath::vec3_add(pos, x_dir);
                 let pos = vecmath::vec3_add(pos, y_dir);
-                transducers.push(SoundSource::new(pos, zdir, PI));
+                transducers.push(SoundSource::new(pos, zdir, 0.0, 0.0));
             }
         }
         transducers
@@ -62,17 +62,19 @@ impl AUTDEventHandler {
                             }
                         }
                         update_handler.update_position();
-                        update_handler.update_phase();
+                        update_handler.update_drive();
                     }
                     AUTDData::Gain(gain) => {
-                        for (&phase, source) in gain
+                        for ((&phase, &amp), source) in gain
                             .phases
                             .iter()
+                            .zip(gain.amps.iter())
                             .zip(update_handler.sources.borrow_mut().iter_mut())
                         {
+                            source.amp = (amp as f32 / 510.0 * std::f32::consts::PI).sin();
                             source.phase = 2.0 * PI * (1.0 - (phase as f32 / 255.0));
                         }
-                        update_handler.update_phase();
+                        update_handler.update_drive();
                     }
                     AUTDData::Clear => {
                         for source in update_handler.sources.borrow_mut().iter_mut() {

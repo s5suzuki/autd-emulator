@@ -27,8 +27,8 @@ type Matrix4 = vecmath::Matrix4<f32>;
 
 fn main() {
     let setting = Setting::load("setting.json");
-    let mut interf = interface::Interface::open(&format!("127.0.0.1:{}", setting.port)).unwrap();
 
+    let mut interf = interface::Interface::open(&format!("127.0.0.1:{}", setting.port)).unwrap();
     let (tx_autd_event, rx_autd_event) = mpsc::channel();
     interf.start(tx_autd_event).unwrap();
 
@@ -45,6 +45,7 @@ fn main() {
     let source_viewer = SoundSourceViewer::new();
     let mut acoustic_field_viewer = AcousticFiledSliceViewer::new();
     acoustic_field_viewer.translate([trans_mm * 8.5, trans_mm * 6.5, 150.]);
+    acoustic_field_viewer.set_posture([1., 0., 0.], [0., 0., 1.]);
 
     let (from_ui, to_cnt) = mpsc::channel();
     let (from_cnt, to_ui) = mpsc::channel();

@@ -4,7 +4,7 @@
  * Created Date: 27/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 05/07/2021
+ * Last Modified: 06/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -13,29 +13,24 @@
 
 extern crate gfx;
 
+use std::{cell::RefCell, rc::Weak, vec};
+
 use camera_controllers::model_view_projection;
-use gfx::format;
-use gfx::handle::{Buffer, DepthStencilView, RenderTargetView, ShaderResourceView};
-use gfx::preset::depth;
-use gfx::state::{Blend, ColorMask};
-use gfx::texture::{FilterMethod, SamplerInfo, WrapMode};
-use gfx::texture::{Kind, Mipmap};
-use gfx::traits::*;
-use gfx::{BlendTarget, DepthTarget, Global, PipelineState, Slice, TextureSampler, VertexBuffer};
+use gfx::{
+    format,
+    handle::{Buffer, DepthStencilView, RenderTargetView, ShaderResourceView},
+    preset::depth,
+    state::{Blend, ColorMask},
+    texture::{FilterMethod, Kind, Mipmap, SamplerInfo, WrapMode},
+    traits::*,
+    BlendTarget, DepthTarget, Global, PipelineState, Slice, TextureSampler, VertexBuffer,
+};
 use gfx_device_gl::Resources;
 use piston_window::*;
-use scarlet::color::RGBColor;
-use scarlet::colormap::ColorMap;
-use shader_version::glsl::GLSL;
-use shader_version::Shaders;
+use scarlet::{color::RGBColor, colormap::ColorMap};
+use shader_version::{glsl::GLSL, Shaders};
 
-use std::cell::RefCell;
-use std::rc::Weak;
-use std::vec;
-
-use crate::sound_source::SoundSource;
-use crate::view::ViewerSettings;
-use crate::{Matrix4, Vector3};
+use crate::{sound_source::SoundSource, view::ViewerSettings, Matrix4, Vector3};
 
 gfx_vertex_struct!(Vertex {
     a_pos: [i8; 4] = "a_pos",
@@ -69,7 +64,7 @@ gfx_pipeline!( pipe {
     u_trans_pos: TextureSampler<[f32; 4]> = "u_trans_pos",
     u_trans_pos_256: TextureSampler<[f32; 4]> = "u_trans_pos_256",
     u_trans_pos_sub: TextureSampler<[f32; 4]> = "u_trans_pos_sub",
-    u_trans_phase: TextureSampler<[f32; 4]> = "u_trans_phase",
+    u_trans_drive: TextureSampler<[f32; 4]> = "u_trans_drive",
     out_color: BlendTarget<format::Srgba8> = ("o_Color", ColorMask::all(), alpha_blender()),
     out_depth: DepthTarget<format::DepthStencil> = depth::LESS_EQUAL_WRITE,
 });
@@ -81,7 +76,7 @@ pub struct AcousticFiledSliceViewer {
     model: Matrix4,
     pso_slice: Option<(PipelineState<Resources, pipe::Meta>, Slice<Resources>)>,
     position_updated: bool,
-    phase_updated: bool,
+    drive_updated: bool,
     colomap_updated: bool,
 }
 
@@ -94,7 +89,7 @@ impl AcousticFiledSliceViewer {
             model: vecmath_util::mat4_scale(100.),
             pso_slice: None,
             position_updated: false,
-            phase_updated: false,
+            drive_updated: false,
             colomap_updated: false,
         }
     }
@@ -116,18 +111,18 @@ impl AcousticFiledSliceViewer {
         self.initialize_shader(factory, glsl, slice);
 
         let len = self.sources.upgrade().unwrap().borrow().len();
-        let phase_view = AcousticFiledSliceViewer::generate_empty_view(factory, len);
+        let drive_view = AcousticFiledSliceViewer::generate_empty_view(factory, len);
 
         self.initialize_pipe_data(
             factory,
             vertex_buffer,
-            phase_view,
+            drive_view,
             window.output_color.clone(),
             window.output_stencil.clone(),
         );
 
         self.update_source_pos();
-        self.update_source_phase();
+        self.update_source_drive();
         self.update_color_map();
     }
 
@@ -135,8 +130,8 @@ impl AcousticFiledSliceViewer {
         self.position_updated = true;
     }
 
-    pub fn update_source_phase(&mut self) {
-        self.phase_updated = true;
+    pub fn update_source_drive(&mut self) {
+        self.drive_updated = true;
     }
 
     pub fn update_color_map(&mut self) {
@@ -192,13 +187,13 @@ impl AcousticFiledSliceViewer {
     ) {
         window.draw_3d(event, |window| {
             if let Some(data) = &mut self.pipe_data {
-                if self.phase_updated {
-                    AcousticFiledSliceViewer::update_phase_texture(
+                if self.drive_updated {
+                    AcousticFiledSliceViewer::update_drive_texture(
                         data,
                         &mut window.factory,
                         &self.sources.upgrade().unwrap().borrow(),
                     );
-                    self.phase_updated = false;
+                    self.drive_updated = false;
                 }
 
                 if self.position_updated {
@@ -248,7 +243,7 @@ impl AcousticFiledSliceViewer {
         });
     }
 
-    fn update_phase_texture(
+    fn update_drive_texture(
         data: &mut pipe::Data<gfx_device_gl::Resources>,
         factory: &mut gfx_device_gl::Factory,
         sources: &[SoundSource],
@@ -258,7 +253,12 @@ impl AcousticFiledSliceViewer {
         let sampler_info = SamplerInfo::new(FilterMethod::Scale, WrapMode::Tile);
         let mut texels = Vec::with_capacity(sources.len());
         for source in sources {
-            texels.push([(source.phase / (2.0 * PI) * 255.) as u8, 0x00, 0x00, 0x00]);
+            texels.push([
+                (source.phase / (2.0 * PI) * 255.) as u8,
+                (source.amp * 255.0) as u8,
+                0x00,
+                0x00,
+            ]);
         }
         let (_, texture_view) = factory
             .create_texture_immutable::<format::Rgba8>(
@@ -267,7 +267,7 @@ impl AcousticFiledSliceViewer {
                 &[&texels],
             )
             .unwrap();
-        data.u_trans_phase = (texture_view, factory.create_sampler(sampler_info));
+        data.u_trans_drive = (texture_view, factory.create_sampler(sampler_info));
     }
 
     fn update_color_map_texture(
@@ -352,7 +352,7 @@ impl AcousticFiledSliceViewer {
         &mut self,
         factory: &mut gfx_device_gl::Factory,
         vertex_buffer: Buffer<Resources, Vertex>,
-        phase_view: ShaderResourceView<Resources, [f32; 4]>,
+        drive_view: ShaderResourceView<Resources, [f32; 4]>,
         out_color: RenderTargetView<Resources, (format::R8_G8_B8_A8, format::Srgb)>,
         out_depth: DepthStencilView<Resources, (format::D24_S8, format::Unorm)>,
     ) {
@@ -382,7 +382,7 @@ impl AcousticFiledSliceViewer {
                 AcousticFiledSliceViewer::generate_empty_view(factory, len),
                 factory.create_sampler(sampler_info),
             ),
-            u_trans_phase: (phase_view, factory.create_sampler(sampler_info)),
+            u_trans_drive: (drive_view, factory.create_sampler(sampler_info)),
             out_color,
             out_depth,
         });
@@ -413,12 +413,18 @@ impl AcousticFiledSliceViewer {
             factory
                 .create_pipeline_simple(
                     Shaders::new()
-                        .set(GLSL::V4_50, include_str!("../../assets/shaders/slice.vert"))
+                        .set(
+                            GLSL::V4_50,
+                            include_str!("../../../assets/shaders/slice.vert"),
+                        )
                         .get(version)
                         .unwrap()
                         .as_bytes(),
                     Shaders::new()
-                        .set(GLSL::V4_50, include_str!("../../assets/shaders/slice.frag"))
+                        .set(
+                            GLSL::V4_50,
+                            include_str!("../../../assets/shaders/slice.frag"),
+                        )
                         .get(version)
                         .unwrap()
                         .as_bytes(),

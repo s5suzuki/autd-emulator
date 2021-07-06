@@ -4,7 +4,7 @@
  * Created Date: 27/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 05/07/2021
+ * Last Modified: 06/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -74,7 +74,7 @@ pub struct SoundSourceViewer {
     pso_slice: Option<(PipelineState<Resources, pipe::Meta>, Slice<Resources>)>,
     models: Vec<Matrix4>,
     position_updated: bool,
-    phase_updated: bool,
+    drive_updated: bool,
     vertex_buffer: Option<Buffer<Resources, Vertex>>,
     view: Option<ShaderResourceView<Resources, [f32; 4]>>,
 }
@@ -88,7 +88,7 @@ impl SoundSourceViewer {
             pso_slice: None,
             models: vec![],
             position_updated: true,
-            phase_updated: true,
+            drive_updated: true,
             vertex_buffer: None,
             view: None,
         }
@@ -132,7 +132,7 @@ impl SoundSourceViewer {
             window.output_stencil.clone(),
         );
 
-        self.update_phase();
+        self.update_drive();
         self.update_position();
     }
 
@@ -162,8 +162,8 @@ impl SoundSourceViewer {
         self.position_updated = true;
     }
 
-    pub fn update_phase(&mut self) {
-        self.phase_updated = true;
+    pub fn update_drive(&mut self) {
+        self.drive_updated = true;
     }
 
     pub fn renderer(
@@ -173,7 +173,7 @@ impl SoundSourceViewer {
         view: Matrix4,
         projection: Matrix4,
     ) {
-        if self.phase_updated {
+        if self.drive_updated {
             if self.pipe_data_list.len() != self.sources.upgrade().unwrap().borrow().len() {
                 let factory = &mut window.factory;
                 self.initialize_pipe_data(
@@ -187,7 +187,8 @@ impl SoundSourceViewer {
 
             let coloring_method = self.settings.upgrade().unwrap().borrow().trans_coloring;
             for (i, source) in self.sources.upgrade().unwrap().borrow().iter().enumerate() {
-                self.pipe_data_list[i].i_color = coloring_method(source.phase / (2.0 * PI));
+                self.pipe_data_list[i].i_color =
+                    coloring_method(source.phase / (2.0 * PI), source.amp);
             }
         }
 
@@ -249,7 +250,7 @@ impl SoundSourceViewer {
                     Shaders::new()
                         .set(
                             GLSL::V4_50,
-                            include_str!("../../assets/shaders/circle.vert"),
+                            include_str!("../../../assets/shaders/circle.vert"),
                         )
                         .get(version)
                         .unwrap()
@@ -257,7 +258,7 @@ impl SoundSourceViewer {
                     Shaders::new()
                         .set(
                             GLSL::V4_50,
-                            include_str!("../../assets/shaders/circle.frag"),
+                            include_str!("../../../assets/shaders/circle.frag"),
                         )
                         .get(version)
                         .unwrap()

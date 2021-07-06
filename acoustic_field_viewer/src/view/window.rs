@@ -4,7 +4,7 @@
  * Created Date: 27/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 05/07/2021
+ * Last Modified: 06/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -24,7 +24,7 @@ use crate::Matrix4;
 
 pub struct UpdateHandler {
     update_source_pos: bool,
-    update_source_phase: bool,
+    update_source_drive: bool,
     update_camera_pos: bool,
     pub sound_source_viewer: SoundSourceViewer,
     pub field_slice_viewer: AcousticFiledSliceViewer,
@@ -42,7 +42,7 @@ impl UpdateHandler {
         camera: Camera<f32>,
     ) -> UpdateHandler {
         UpdateHandler {
-            update_source_phase: false,
+            update_source_drive: false,
             update_source_pos: false,
             update_camera_pos: false,
             sound_source_viewer,
@@ -54,10 +54,10 @@ impl UpdateHandler {
     }
 
     fn update_sources(&mut self) {
-        if self.update_source_phase {
-            self.sound_source_viewer.update_phase();
-            self.field_slice_viewer.update_source_phase();
-            self.update_source_phase = false;
+        if self.update_source_drive {
+            self.sound_source_viewer.update_drive();
+            self.field_slice_viewer.update_source_drive();
+            self.update_source_drive = false;
         }
         if self.update_source_pos {
             self.sound_source_viewer.update_position();
@@ -74,16 +74,16 @@ impl UpdateHandler {
         self.update_camera_pos = true;
     }
 
-    pub fn update_phase(&mut self) {
-        self.update_source_phase = true;
+    pub fn update_drive(&mut self) {
+        self.update_source_drive = true;
     }
 
     pub fn update_position(&mut self) {
         self.update_source_pos = true;
     }
 
-    pub fn phase_updated(&self) -> bool {
-        self.update_source_phase
+    pub fn drive_updated(&self) -> bool {
+        self.update_source_drive
     }
 
     pub fn position_updated(&self) -> bool {
