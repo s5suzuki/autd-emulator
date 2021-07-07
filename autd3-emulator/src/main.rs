@@ -60,7 +60,7 @@ fn main() {
         [setting.window_width, setting.window_height],
     );
 
-    let autd_event_handler = AUTDEventHandler::new(rx_autd_event);
+    let mut autd_event_handler = AUTDEventHandler::new(rx_autd_event);
     let mut viewer_controller = ViewController::new(to_cnt, from_cnt);
     let update = |update_handler: &mut UpdateHandler, button: Option<Button>| {
         autd_event_handler.update(update_handler);

@@ -4,7 +4,7 @@
  * Created Date: 01/05/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 06/07/2021
+ * Last Modified: 07/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -21,12 +21,16 @@ use crate::parser::{AUTDData, Geometry};
 use autd3_core::hardware_defined::{NUM_TRANS_X, NUM_TRANS_Y, TRANS_SPACING_MM};
 
 pub struct AUTDEventHandler {
+    last_amp: Vec<f32>,
     rx_from_autd: mpsc::Receiver<Vec<u8>>,
 }
 
 impl AUTDEventHandler {
     pub fn new(rx_from_autd: mpsc::Receiver<Vec<u8>>) -> AUTDEventHandler {
-        AUTDEventHandler { rx_from_autd }
+        AUTDEventHandler {
+            last_amp: vec![],
+            rx_from_autd,
+        }
     }
 
     fn make_autd_transducers(geo: Geometry) -> Vec<SoundSource> {
@@ -48,7 +52,7 @@ impl AUTDEventHandler {
         transducers
     }
 
-    pub fn update(&self, update_handler: &mut UpdateHandler) {
+    pub fn update(&mut self, update_handler: &mut UpdateHandler) {
         if let Ok(d) = self.rx_from_autd.try_recv() {
             let data = crate::parser::parse(d);
             for d in data {
@@ -81,8 +85,24 @@ impl AUTDEventHandler {
                             source.phase = 0.;
                         }
                     }
-                    AUTDData::Pause => {}
-                    AUTDData::Resume => {}
+                    AUTDData::Pause => {
+                        self.last_amp.clear();
+                        for source in update_handler.sources.borrow_mut().iter_mut() {
+                            self.last_amp.push(source.amp);
+                            source.amp = 0.;
+                        }
+                    }
+                    AUTDData::Resume => {
+                        for (source, &amp) in update_handler
+                            .sources
+                            .borrow_mut()
+                            .iter_mut()
+                            .zip(self.last_amp.iter())
+                        {
+                            source.amp = amp;
+                        }
+                        self.last_amp.clear();
+                    }
                     _ => (),
                 }
             }
