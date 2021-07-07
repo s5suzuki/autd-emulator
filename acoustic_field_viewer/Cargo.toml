@@ -1,12 +1,13 @@
 [package]
 name = "acoustic_field_viewer"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["shun suzuki <suzuki@hapis.k.u-tokyo.ac.jp>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+bitflags = "1.2.1"
 camera_controllers = "0.32.0"
 conrod = "0.62.1"
 conrod_core = "0.74.0"

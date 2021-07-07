@@ -1,5 +1,7 @@
 #[macro_use]
 extern crate gfx;
+#[macro_use]
+extern crate bitflags;
 
 mod common;
 pub mod sound_source;

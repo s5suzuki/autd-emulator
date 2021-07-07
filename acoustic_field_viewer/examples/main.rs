@@ -11,16 +11,14 @@
  *
  */
 
-extern crate acoustic_field_viewer;
-
 use std::f32::consts::PI;
 
-use acoustic_field_viewer::coloring_method::coloring_hsv;
-use acoustic_field_viewer::sound_source::SoundSource;
-use acoustic_field_viewer::view::{
-    AcousticFiledSliceViewer, SoundSourceViewer, UpdateHandler, ViewWindow, ViewerSettings,
+use acoustic_field_viewer::{
+    coloring_method::coloring_hsv,
+    sound_source::SoundSource,
+    view::{UpdateFlag, ViewWindow, ViewerSettings},
 };
-use piston_window::{Button, Key};
+use piston_window::{Button, Key, PressEvent};
 
 pub fn main() {
     const NUM_TRANS_X: usize = 18;
@@ -35,7 +33,7 @@ pub fn main() {
 
     let mut focal_pos = [TRANS_SIZE * 8.5, TRANS_SIZE * 6.5, 150.];
 
-    let mut transducers = Vec::new();
+    let mut sources = Vec::new();
     let zdir = [0., 0., 1.];
     for y in 0..NUM_TRANS_Y {
         for x in 0..NUM_TRANS_X {
@@ -43,7 +41,7 @@ pub fn main() {
             let d = vecmath_util::dist(pos, focal_pos);
             let phase = (d % WAVE_LENGTH) / WAVE_LENGTH;
             let phase = 2.0 * PI * phase;
-            transducers.push(SoundSource::new(pos, zdir, 1.0, phase));
+            sources.push(SoundSource::new(pos, zdir, 1.0, phase));
         }
     }
 
@@ -58,49 +56,45 @@ pub fn main() {
     settings.color_scale = 0.6;
     settings.slice_alpha = 0.95;
 
-    let source_viewer = SoundSourceViewer::new();
-    let mut acoustic_field_viewer = AcousticFiledSliceViewer::new(vecmath_util::mat4_scale(1.0));
-    acoustic_field_viewer.translate(focal_pos);
-    acoustic_field_viewer.set_posture([1., 0., 0.], [0., 0., 1.]);
+    let (mut window_view, mut window) = ViewWindow::new(&settings, [WINDOW_WIDTH, WINDOW_HEIGHT]);
+    window_view.field_slice_viewer.translate(focal_pos);
+    window_view
+        .field_slice_viewer
+        .set_posture([1., 0., 0.], [0., 0., 1.]);
 
-    let update = |update_handler: &mut UpdateHandler, button: Option<Button>| {
+    if let Some(e) = window.next() {
+        window_view.renderer(&mut window, e, &settings, &sources, UpdateFlag::all());
+    }
+
+    while let Some(e) = window.next() {
         let travel = 5.0;
-        match button {
+        let mut update_flag = UpdateFlag::empty();
+        match e.press_args() {
             Some(Button::Keyboard(Key::Up)) => {
-                update_handler
-                    .field_slice_viewer
-                    .translate([0., 0., travel]);
+                window_view.field_slice_viewer.translate([0., 0., travel]);
             }
             Some(Button::Keyboard(Key::Down)) => {
-                update_handler
-                    .field_slice_viewer
-                    .translate([0., 0., -travel]);
+                window_view.field_slice_viewer.translate([0., 0., -travel]);
             }
             Some(Button::Keyboard(Key::Left)) => {
-                update_handler
-                    .field_slice_viewer
-                    .translate([-travel, 0., 0.]);
+                window_view.field_slice_viewer.translate([-travel, 0., 0.]);
             }
             Some(Button::Keyboard(Key::Right)) => {
-                update_handler
-                    .field_slice_viewer
-                    .translate([travel, 0., 0.]);
+                window_view.field_slice_viewer.translate([travel, 0., 0.]);
             }
             Some(Button::Keyboard(Key::Z)) => {
-                update_handler.field_slice_viewer.rotate([0., 0., 1.], 0.05);
+                window_view.field_slice_viewer.rotate([0., 0., 1.], 0.05);
             }
             Some(Button::Keyboard(Key::X)) => {
-                update_handler
-                    .field_slice_viewer
-                    .rotate([0., 0., 1.], -0.05);
+                window_view.field_slice_viewer.rotate([0., 0., 1.], -0.05);
             }
             Some(Button::Keyboard(Key::C)) => {
-                update_handler.settings.borrow_mut().color_scale += 0.1;
-                update_handler.field_slice_viewer.update_color_map();
+                settings.color_scale += 0.1;
+                update_flag |= UpdateFlag::UPDATE_COLOR_MAP;
             }
             Some(Button::Keyboard(Key::V)) => {
-                update_handler.settings.borrow_mut().color_scale -= 0.1;
-                update_handler.field_slice_viewer.update_color_map();
+                settings.color_scale -= 0.1;
+                update_flag |= UpdateFlag::UPDATE_COLOR_MAP;
             }
             Some(Button::Keyboard(Key::G)) => {
                 focal_pos = vecmath::vec3_add(focal_pos, [travel, 0., 0.]);
@@ -108,7 +102,7 @@ pub fn main() {
                     let d = vecmath::vec3_sub(l, r);
                     vecmath::vec3_dot(d, d).sqrt()
                 };
-                for source in update_handler.sources.borrow_mut().iter_mut() {
+                for source in sources.iter_mut() {
                     let pos = source.pos;
                     let d = dist(pos, focal_pos);
                     let phase = (d % WAVE_LENGTH) / WAVE_LENGTH;
@@ -116,7 +110,7 @@ pub fn main() {
 
                     source.phase = phase;
                 }
-                update_handler.update_drive();
+                update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
             }
             Some(Button::Keyboard(Key::F)) => {
                 focal_pos = vecmath::vec3_add(focal_pos, [-travel, 0., 0.]);
@@ -124,7 +118,7 @@ pub fn main() {
                     let d = vecmath::vec3_sub(l, r);
                     vecmath::vec3_dot(d, d).sqrt()
                 };
-                for source in update_handler.sources.borrow_mut().iter_mut() {
+                for source in sources.iter_mut() {
                     let pos = source.pos;
                     let d = dist(pos, focal_pos);
                     let phase = (d % WAVE_LENGTH) / WAVE_LENGTH;
@@ -132,22 +126,10 @@ pub fn main() {
 
                     source.phase = phase;
                 }
-                update_handler.update_drive();
+                update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
             }
             _ => (),
         }
-    };
-
-    let (mut window_view, mut window) = ViewWindow::new(
-        transducers,
-        source_viewer,
-        acoustic_field_viewer,
-        settings,
-        [WINDOW_WIDTH, WINDOW_HEIGHT],
-    );
-    window_view.update = Some(update);
-
-    while let Some(e) = window.next() {
-        window_view.renderer(&mut window, e);
+        window_view.renderer(&mut window, e, &settings, &sources, update_flag);
     }
 }

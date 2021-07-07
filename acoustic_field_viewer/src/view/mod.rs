@@ -14,10 +14,11 @@
 mod acoustic_field_slice_viewer;
 mod setting;
 mod sound_source_viewer;
+mod update_flag;
 mod window;
 
 pub use acoustic_field_slice_viewer::AcousticFiledSliceViewer;
 pub use setting::ViewerSettings;
 pub use sound_source_viewer::SoundSourceViewer;
-pub use window::UpdateHandler;
+pub use update_flag::UpdateFlag;
 pub use window::ViewWindow;
