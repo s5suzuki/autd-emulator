@@ -4,19 +4,17 @@
  * Created Date: 01/05/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 05/07/2021
+ * Last Modified: 07/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
  *
  */
 
-use crate::Vector3;
-use acoustic_field_viewer::view::event::*;
 use acoustic_field_viewer::view::UpdateHandler;
+use piston_window::{Button, Key};
 
-use crate::camera_helper;
-use crate::ui::UICommand;
+use crate::{camera_helper, ui::UICommand, Vector3};
 
 use std::sync::mpsc::{Receiver, Sender};
 

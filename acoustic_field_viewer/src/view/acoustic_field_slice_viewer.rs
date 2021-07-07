@@ -4,7 +4,7 @@
  * Created Date: 27/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 06/07/2021
+ * Last Modified: 07/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -17,7 +17,7 @@ use std::{cell::RefCell, rc::Weak, vec};
 
 use camera_controllers::model_view_projection;
 use gfx::{
-    format,
+    format::{self, Rgba32F},
     handle::{Buffer, DepthStencilView, RenderTargetView, ShaderResourceView},
     preset::depth,
     state::{Blend, ColorMask},
@@ -57,14 +57,11 @@ gfx_pipeline!( pipe {
     vertex_buffer: VertexBuffer<Vertex> = (),
     u_model_view_proj: Global<[[f32; 4]; 4]> = "u_model_view_proj",
     u_model: Global<[[f32; 4]; 4]> = "u_model",
-    u_trans_size : Global<f32> = "u_trans_size",
     u_color_scale : Global<f32> = "u_color_scale",
     u_wavenum : Global<f32> = "u_wavenum",
     u_color_map: TextureSampler<[f32; 4]> = "u_color_map",
     u_trans_num : Global<f32> = "u_trans_num",
     u_trans_pos: TextureSampler<[f32; 4]> = "u_trans_pos",
-    u_trans_pos_256: TextureSampler<[f32; 4]> = "u_trans_pos_256",
-    u_trans_pos_sub: TextureSampler<[f32; 4]> = "u_trans_pos_sub",
     u_trans_drive: TextureSampler<[f32; 4]> = "u_trans_drive",
     out_color: BlendTarget<format::Srgba8> = ("o_Color", ColorMask::all(), alpha_blender()),
     out_depth: DepthTarget<format::DepthStencil> = depth::LESS_EQUAL_WRITE,
@@ -203,14 +200,12 @@ impl AcousticFiledSliceViewer {
                 }
 
                 if self.position_updated {
-                    let source_size = self.settings.upgrade().unwrap().borrow().source_size;
                     let source_num = self.sources.upgrade().unwrap().borrow().len();
                     data.u_trans_num = source_num as f32;
                     AcousticFiledSliceViewer::update_position_texture(
                         data,
                         &mut window.factory,
                         &self.sources.upgrade().unwrap().borrow(),
-                        source_size,
                     );
                     self.position_updated = false;
                 }
@@ -255,7 +250,6 @@ impl AcousticFiledSliceViewer {
         sources: &[SoundSource],
     ) {
         use std::f32::consts::PI;
-
         let sampler_info = SamplerInfo::new(FilterMethod::Scale, WrapMode::Tile);
         let mut texels = Vec::with_capacity(sources.len());
         for source in sources {
@@ -306,52 +300,24 @@ impl AcousticFiledSliceViewer {
         data: &mut pipe::Data<gfx_device_gl::Resources>,
         factory: &mut gfx_device_gl::Factory,
         sources: &[SoundSource],
-        source_size: f32,
     ) {
-        use format::Rgba8;
-
         let sampler_info = SamplerInfo::new(FilterMethod::Scale, WrapMode::Tile);
         let size = sources.len();
         let kind = Kind::D1(size as u16);
         let mipmap = Mipmap::Provided;
 
-        let texels: Vec<[u8; 4]> = sources
+        let texels: Vec<[u32; 4]> = sources
             .iter()
             .map(|source| {
                 let pos = vecmath_util::to_vec4(source.pos);
-                vecmath_util::vec4_map(pos, |p| ((p / source_size).round() as u16 % 256) as u8)
+                // vecmath_util::vec4_map(pos, |p| ((p / source_size).round() as u16 % 256) as u8)
+                vecmath_util::vec4_map(pos, |p| unsafe { *(&p as *const _ as *const u32) })
             })
             .collect();
         let (_, texture_view) = factory
-            .create_texture_immutable::<Rgba8>(kind, mipmap, &[&texels])
+            .create_texture_immutable::<Rgba32F>(kind, mipmap, &[&texels])
             .unwrap();
         data.u_trans_pos = (texture_view, factory.create_sampler(sampler_info));
-
-        let texels: Vec<[u8; 4]> = sources
-            .iter()
-            .map(|source| {
-                let pos = vecmath_util::to_vec4(source.pos);
-                vecmath_util::vec4_map(pos, |p| ((p / source_size).round() as u16 / 256) as u8)
-            })
-            .collect();
-        let (_, texture_view) = factory
-            .create_texture_immutable::<Rgba8>(kind, mipmap, &[&texels])
-            .unwrap();
-        data.u_trans_pos_256 = (texture_view, factory.create_sampler(sampler_info));
-
-        let texels: Vec<[u8; 4]> = sources
-            .iter()
-            .map(|source| {
-                let pos = vecmath_util::to_vec4(source.pos);
-                vecmath_util::vec4_map(pos, |p| {
-                    (((p % source_size) / source_size * 256.0).round() as u16 % 256) as u8
-                })
-            })
-            .collect();
-        let (_, texture_view) = factory
-            .create_texture_immutable::<Rgba8>(kind, mipmap, &[&texels])
-            .unwrap();
-        data.u_trans_pos_sub = (texture_view, factory.create_sampler(sampler_info));
     }
 
     fn initialize_pipe_data(
@@ -364,7 +330,6 @@ impl AcousticFiledSliceViewer {
     ) {
         let sampler_info = SamplerInfo::new(FilterMethod::Scale, WrapMode::Tile);
         let len = self.sources.upgrade().unwrap().borrow().len();
-        let source_size = self.settings.upgrade().unwrap().borrow().source_size;
         let wave_length = self.settings.upgrade().unwrap().borrow().wave_length;
         self.pipe_data = Some(pipe::Data {
             vertex_buffer,
@@ -372,21 +337,12 @@ impl AcousticFiledSliceViewer {
             u_model: vecmath_util::mat4_scale(1.0),
             u_color_scale: 1.0,
             u_wavenum: 2.0 * std::f32::consts::PI / wave_length,
-            u_trans_size: source_size,
             u_trans_num: len as f32,
             u_color_map: (
                 AcousticFiledSliceViewer::generate_empty_view(factory, len),
                 factory.create_sampler(SamplerInfo::new(FilterMethod::Bilinear, WrapMode::Clamp)),
             ),
             u_trans_pos: (
-                AcousticFiledSliceViewer::generate_empty_view(factory, len),
-                factory.create_sampler(sampler_info),
-            ),
-            u_trans_pos_256: (
-                AcousticFiledSliceViewer::generate_empty_view(factory, len),
-                factory.create_sampler(sampler_info),
-            ),
-            u_trans_pos_sub: (
                 AcousticFiledSliceViewer::generate_empty_view(factory, len),
                 factory.create_sampler(sampler_info),
             ),
