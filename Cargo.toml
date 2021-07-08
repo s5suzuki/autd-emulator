@@ -3,5 +3,6 @@
 members = [
     "acoustic_field_viewer",
     "autd3-emulator",
+    "autd3-emulator-server",
     "vecmath_util"
 ]

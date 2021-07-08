@@ -8,6 +8,7 @@ edition = "2018"
 
 [dependencies]
 acoustic_field_viewer = {path="../acoustic_field_viewer"}
+autd3_emulator_server = {path="../autd3-emulator-server"}
 conrod = "0.62.1"
 conrod_core = "0.74.0"
 conrod_piston = "0.74.0"

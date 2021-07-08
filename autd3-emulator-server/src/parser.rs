@@ -4,7 +4,7 @@
  * Created Date: 29/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 05/07/2021
+ * Last Modified: 07/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -15,34 +15,10 @@ use std::mem::size_of;
 
 use autd3_core::hardware_defined::RxGlobalHeader;
 
-use crate::Vector3;
-
-#[allow(dead_code)]
-pub struct Modulation {
-    pub(crate) mod_data: Vec<u8>,
-}
-
-#[derive(Debug)]
-pub struct Gain {
-    pub(crate) amps: Vec<u8>,
-    pub(crate) phases: Vec<u8>,
-}
-
-#[derive(Debug)]
-pub struct Geometry {
-    pub(crate) origin: Vector3,
-    pub(crate) right: Vector3,
-    pub(crate) up: Vector3,
-}
-
-pub enum AUTDData {
-    Modulation(Modulation),
-    Gain(Gain),
-    Geometries(Vec<Geometry>),
-    Clear,
-    Pause,
-    Resume,
-}
+use crate::{
+    autd_data::{AUTDData, Gain, Geometry, Modulation},
+    Vector3,
+};
 
 pub fn parse(raw_buf: Vec<u8>) -> Vec<AUTDData> {
     let mut res = Vec::new();
