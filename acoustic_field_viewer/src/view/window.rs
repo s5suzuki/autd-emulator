@@ -4,7 +4,7 @@
  * Created Date: 27/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 07/07/2021
+ * Last Modified: 08/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -28,7 +28,11 @@ pub struct ViewWindow {
 }
 
 impl ViewWindow {
-    pub fn new<S: Into<Size>>(settings: &ViewerSettings, size: S) -> (ViewWindow, PistonWindow) {
+    pub fn new<S: Into<Size>>(
+        model: Matrix4,
+        settings: &ViewerSettings,
+        size: S,
+    ) -> (ViewWindow, PistonWindow) {
         let opengl = OpenGL::V4_5;
         let mut window: PistonWindow = WindowSettings::new("", size)
             .exit_on_esc(true)
@@ -45,8 +49,7 @@ impl ViewWindow {
         camera.set_yaw_pitch(0., -std::f32::consts::PI / 2.0);
 
         let sound_source_viewer = SoundSourceViewer::new(&mut window, opengl);
-        let field_slice_viewer =
-            AcousticFiledSliceViewer::new(vecmath_util::mat4_scale(1.0), &window, opengl, settings);
+        let field_slice_viewer = AcousticFiledSliceViewer::new(model, &window, opengl, settings);
 
         (
             ViewWindow {

@@ -4,7 +4,7 @@
  * Created Date: 27/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 07/07/2021
+ * Last Modified: 08/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -56,7 +56,11 @@ pub fn main() {
     settings.color_scale = 0.6;
     settings.slice_alpha = 0.95;
 
-    let (mut window_view, mut window) = ViewWindow::new(&settings, [WINDOW_WIDTH, WINDOW_HEIGHT]);
+    let (mut window_view, mut window) = ViewWindow::new(
+        vecmath_util::mat4_scale(1.0),
+        &settings,
+        [WINDOW_WIDTH, WINDOW_HEIGHT],
+    );
     window_view.field_slice_viewer.translate(focal_pos);
     window_view
         .field_slice_viewer
