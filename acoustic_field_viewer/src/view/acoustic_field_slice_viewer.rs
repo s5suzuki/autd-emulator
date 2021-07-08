@@ -4,7 +4,7 @@
  * Created Date: 27/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 07/07/2021
+ * Last Modified: 08/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -72,7 +72,6 @@ gfx_pipeline!( pipe {
 pub struct AcousticFiledSliceViewer {
     pipe_data: pipe::Data<Resources>,
     model: Matrix4,
-    update_model: bool,
     pso_slice: (PipelineState<Resources, pipe::Meta>, Slice<Resources>),
 }
 
@@ -114,7 +113,6 @@ impl AcousticFiledSliceViewer {
                 window.output_stencil.clone(),
             ),
             model,
-            update_model: true,
             pso_slice: Self::initialize_shader(factory, glsl, slice),
         }
     }
@@ -123,7 +121,6 @@ impl AcousticFiledSliceViewer {
         self.model[3][0] += travel[0];
         self.model[3][1] += travel[1];
         self.model[3][2] += travel[2];
-        self.update_model = true;
     }
 
     pub fn set_posture(&mut self, right: Vector3, up: Vector3) {
@@ -131,14 +128,12 @@ impl AcousticFiledSliceViewer {
         self.model[0] = vecmath_util::to_vec4(right);
         self.model[1] = vecmath_util::to_vec4(up);
         self.model[2] = vecmath_util::to_vec4(forward);
-        self.update_model = true;
     }
 
     pub fn rotate(&mut self, axis: Vector3, rot: f32) {
         let rot = quaternion::axis_angle(axis, rot);
         let rotm = vecmath_util::mat4_rot(rot);
         self.model = vecmath::col_mat4_mul(self.model, rotm);
-        self.update_model = true;
     }
 
     pub fn model(&self) -> Matrix4 {
@@ -204,11 +199,12 @@ impl AcousticFiledSliceViewer {
             self.pipe_data.u_wavenum = 2.0 * std::f32::consts::PI / settings.wave_length;
         }
 
-        if self.update_model {
+        if update_flag.contains(UpdateFlag::UPDATE_CAMERA_POS)
+            || update_flag.contains(UpdateFlag::UPDATE_SLICE_POS)
+        {
             self.pipe_data.u_model = self.model;
             self.pipe_data.u_model_view_proj =
                 model_view_projection(self.model, view_projection.0, view_projection.1);
-            self.update_model = false;
         }
 
         window.draw_3d(event, |window| {

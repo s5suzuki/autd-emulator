@@ -4,7 +4,7 @@
  * Created Date: 27/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 07/07/2021
+ * Last Modified: 08/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -167,22 +167,29 @@ impl SoundSourceViewer {
                 self.pipe_data_list[i].u_model_view_proj =
                     model_view_projection(self.models[i], view_projection.0, view_projection.1);
             }
-        }
-
-        for i in 0..self.pipe_data_list.len() {
-            window.encoder.draw(
-                &self.pso_slice.1,
-                &self.pso_slice.0,
-                &self.pipe_data_list[i],
-            );
-        }
-
-        if event.resize_args().is_some() {
-            for pipe_data in &mut self.pipe_data_list {
-                pipe_data.out_color = window.output_color.clone();
-                pipe_data.out_depth = window.output_stencil.clone();
+        } else if update_flag.contains(UpdateFlag::UPDATE_CAMERA_POS) {
+            for i in 0..self.pipe_data_list.len() {
+                self.pipe_data_list[i].u_model_view_proj =
+                    model_view_projection(self.models[i], view_projection.0, view_projection.1);
             }
         }
+
+        window.draw_3d(event, |window| {
+            for i in 0..self.pipe_data_list.len() {
+                window.encoder.draw(
+                    &self.pso_slice.1,
+                    &self.pso_slice.0,
+                    &self.pipe_data_list[i],
+                );
+            }
+
+            if event.resize_args().is_some() {
+                for pipe_data in &mut self.pipe_data_list {
+                    pipe_data.out_color = window.output_color.clone();
+                    pipe_data.out_depth = window.output_stencil.clone();
+                }
+            }
+        });
     }
 
     fn initialize_pipe_data(

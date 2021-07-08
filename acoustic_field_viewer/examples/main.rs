@@ -76,21 +76,27 @@ pub fn main() {
         match e.press_args() {
             Some(Button::Keyboard(Key::Up)) => {
                 window_view.field_slice_viewer.translate([0., 0., travel]);
+                update_flag |= UpdateFlag::UPDATE_SLICE_POS;
             }
             Some(Button::Keyboard(Key::Down)) => {
                 window_view.field_slice_viewer.translate([0., 0., -travel]);
+                update_flag |= UpdateFlag::UPDATE_SLICE_POS;
             }
             Some(Button::Keyboard(Key::Left)) => {
                 window_view.field_slice_viewer.translate([-travel, 0., 0.]);
+                update_flag |= UpdateFlag::UPDATE_SLICE_POS;
             }
             Some(Button::Keyboard(Key::Right)) => {
                 window_view.field_slice_viewer.translate([travel, 0., 0.]);
+                update_flag |= UpdateFlag::UPDATE_SLICE_POS;
             }
             Some(Button::Keyboard(Key::Z)) => {
                 window_view.field_slice_viewer.rotate([0., 0., 1.], 0.05);
+                update_flag |= UpdateFlag::UPDATE_SLICE_POS;
             }
             Some(Button::Keyboard(Key::X)) => {
                 window_view.field_slice_viewer.rotate([0., 0., 1.], -0.05);
+                update_flag |= UpdateFlag::UPDATE_SLICE_POS;
             }
             Some(Button::Keyboard(Key::C)) => {
                 settings.color_scale += 0.1;
