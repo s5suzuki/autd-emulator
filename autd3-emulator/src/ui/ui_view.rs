@@ -4,7 +4,7 @@
  * Created Date: 01/05/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 06/07/2021
+ * Last Modified: 08/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -110,13 +110,16 @@ impl<'a> UiView<'a> {
         const WIDTH: u32 = WIN_W;
         const HEIGHT: u32 = WIN_H;
 
-        let mut window: PistonWindow = WindowSettings::new("AUTD3 emulator", [800, 800])
+        let mut window: PistonWindow = WindowSettings::new("AUTD3 emulator", [WIDTH, HEIGHT])
             .graphics_api(OpenGL::V4_5)
             .samples(4)
             .exit_on_esc(true)
             .vsync(true)
+            .
             .build()
             .unwrap();
+        window.set_ups(60);
+        window.set_max_fps(1000);
 
         let mut ui = conrod_core::UiBuilder::new([WIDTH as f64, HEIGHT as f64])
             .theme(theme())

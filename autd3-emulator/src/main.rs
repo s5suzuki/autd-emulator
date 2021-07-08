@@ -5,15 +5,14 @@ mod camera_helper;
 mod color;
 mod settings;
 mod ui;
-// mod viewer_controller;
+mod viewer_controller;
 
 use std::{f32::consts::PI, sync::mpsc};
 
-use crate::{settings::Setting, ui::UiView};
+use crate::{settings::Setting, ui::UiView, viewer_controller::ViewController};
 use acoustic_field_viewer::{
-    coloring_method::coloring_hsv,
     sound_source::SoundSource,
-    view::{UpdateFlag, ViewWindow, ViewerSettings},
+    view::{UpdateFlag, ViewWindow},
 };
 use autd3_core::hardware_defined::{NUM_TRANS_X, NUM_TRANS_Y, TRANS_SPACING_MM};
 use autd3_emulator_server::{AUTDData, AUTDServer, Geometry};
@@ -46,38 +45,36 @@ fn main() {
 
     let mut autd_server = AUTDServer::new(&format!("127.0.0.1:{}", setting.port)).unwrap();
 
-    let trans_mm = autd3_core::hardware_defined::TRANS_SPACING_MM as f32;
-    let mut settings = ViewerSettings::new(
-        40e3,
-        setting.wave_length,
-        trans_mm,
-        coloring_hsv,
-        scarlet::colormap::ListedColorMap::inferno(),
-        (setting.slice_width, setting.slice_height),
+    let mut viewer_setting = setting.to_viewer_settings();
+    viewer_setting.color_scale = 0.6;
+    viewer_setting.slice_alpha = 0.95;
+
+    let (mut field_view, mut field_window) = ViewWindow::new(
+        setting.slice_model,
+        &viewer_setting,
+        [setting.window_width, setting.window_height],
     );
-    settings.color_scale = 0.6;
-    settings.slice_alpha = 0.95;
 
     let (from_ui, to_cnt) = mpsc::channel();
     let (from_cnt, to_ui) = mpsc::channel();
-
-    let (mut field_view, mut field_window) =
-        ViewWindow::new(&settings, [setting.window_width, setting.window_height]);
-
-    // let mut autd_event_handler = AUTDEventHandler::new(rx_autd_event);
-    // let mut viewer_controller = ViewController::new(to_cnt, from_cnt);
-    // let update = |update_handler: &mut UpdateHandler, button: Option<Button>| {
-    // autd_event_handler.update(update_handler);
-    // viewer_controller.update(update_handler, button);
-    // };
-    // field_view.update = Some(update);
+    let mut viewer_controller = ViewController::new(to_cnt, from_cnt);
+    let (mut ui_view, mut ui_window) = UiView::new(to_ui, from_ui);
 
     let mut sources = Vec::new();
     let mut last_amp = Vec::new();
 
-    let (mut ui_view, mut ui_window) = UiView::new(to_ui, from_ui);
-    while let (Some(e_field), Some(e_ui)) = (field_window.next(), ui_window.next()) {
+    let mut is_init = true;
+
+    while let Some(e_field) = field_window.next() {
+        // while let (Some(e_field), Some(e_ui)) = (field_window.next(), ui_window.next()) {
         let mut update_flag = UpdateFlag::empty();
+        if is_init {
+            update_flag |= UpdateFlag::UPDATE_SLICE_POS;
+            update_flag |= UpdateFlag::UPDATE_COLOR_MAP;
+            update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
+            update_flag |= UpdateFlag::UPDATE_WAVENUM;
+            is_init = false;
+        }
 
         autd_server.update(|data| {
             for d in data {
@@ -85,8 +82,7 @@ fn main() {
                     AUTDData::Geometries(geometries) => {
                         sources.clear();
                         for geometry in geometries {
-                            let transducers = make_autd_transducers(geometry);
-                            for trans in transducers {
+                            for trans in make_autd_transducers(geometry) {
                                 sources.push(trans);
                             }
                         }
@@ -110,6 +106,7 @@ fn main() {
                             source.amp = 0.;
                             source.phase = 0.;
                         }
+                        update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
                     }
                     AUTDData::Pause => {
                         last_amp.clear();
@@ -117,27 +114,36 @@ fn main() {
                             last_amp.push(source.amp);
                             source.amp = 0.;
                         }
+                        update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
                     }
                     AUTDData::Resume => {
                         for (source, &amp) in sources.iter_mut().zip(last_amp.iter()) {
                             source.amp = amp;
                         }
                         last_amp.clear();
+                        update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
                     }
                     _ => (),
                 }
             }
         });
 
-        field_view.renderer(&mut field_window, e_field, &settings, &sources, update_flag);
-        ui_view.renderer(&mut ui_window, e_ui);
+        // viewer_controller.update(&mut field_view, &e_field, &mut &mut update_flag);
+        field_view.renderer(
+            &mut field_window,
+            e_field,
+            &viewer_setting,
+            &sources,
+            update_flag,
+        );
+        // ui_view.renderer(&mut ui_window, e_ui);
     }
 
     autd_server.close();
 
     setting.slice_model = field_view.get_slice_model();
 
-    let current_size = field_window.draw_size();
+    let current_size = field_window.size();
     setting.window_width = current_size.width as u32;
     setting.window_height = current_size.height as u32;
     setting.save("setting.json");

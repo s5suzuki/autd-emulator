@@ -38,10 +38,12 @@ impl ViewWindow {
             .exit_on_esc(true)
             .samples(4)
             .graphics_api(opengl)
+            .vsync(true)
             .build()
             .unwrap();
         window.set_ups(60);
         window.set_max_fps(1000);
+
         let projection = ViewWindow::get_projection(&window);
         let first_person =
             FirstPerson::new([90., -250.0, 120.0], FirstPersonSettings::keyboard_wasd());
@@ -73,14 +75,7 @@ impl ViewWindow {
         let cam_orth = self.camera.orthogonal();
         let projection = self.projection;
 
-        window.draw_3d(&event, |window| {
-            window
-                .encoder
-                .clear(&window.output_color, [0.3, 0.3, 0.3, 1.0]);
-            window.encoder.clear_depth(&window.output_stencil, 1.0);
-        });
-
-        self.sound_source_viewer.renderer(
+        self.field_slice_viewer.update(
             window,
             &event,
             (cam_orth, projection),
@@ -88,8 +83,7 @@ impl ViewWindow {
             sources,
             update_flag,
         );
-
-        self.field_slice_viewer.renderer(
+        self.sound_source_viewer.update(
             window,
             &event,
             (cam_orth, projection),
@@ -101,6 +95,17 @@ impl ViewWindow {
         if event.resize_args().is_some() {
             self.projection = ViewWindow::get_projection(&window);
         }
+
+        window.draw_3d(&event, |window| {
+            window
+                .encoder
+                .clear(&window.output_color, [0.3, 0.3, 0.3, 1.0]);
+            window.encoder.clear_depth(&window.output_stencil, 1.0);
+
+            self.sound_source_viewer.renderer(window);
+
+            self.field_slice_viewer.renderer(window);
+        });
     }
 
     fn get_projection(w: &PistonWindow) -> Matrix4 {

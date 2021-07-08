@@ -156,7 +156,7 @@ impl AcousticFiledSliceViewer {
         vecmath::vec3_normalized(vecmath_util::to_vec3(&self.model[2]))
     }
 
-    pub fn renderer(
+    pub fn update(
         &mut self,
         window: &mut PistonWindow,
         event: &Event,
@@ -207,16 +207,16 @@ impl AcousticFiledSliceViewer {
                 model_view_projection(self.model, view_projection.0, view_projection.1);
         }
 
-        window.draw_3d(event, |window| {
-            window
-                .encoder
-                .draw(&self.pso_slice.1, &self.pso_slice.0, &self.pipe_data);
+        if event.resize_args().is_some() {
+            self.pipe_data.out_color = window.output_color.clone();
+            self.pipe_data.out_depth = window.output_stencil.clone();
+        }
+    }
 
-            if event.resize_args().is_some() {
-                self.pipe_data.out_color = window.output_color.clone();
-                self.pipe_data.out_depth = window.output_stencil.clone();
-            }
-        });
+    pub fn renderer(&mut self, window: &mut PistonWindow) {
+        window
+            .encoder
+            .draw(&self.pso_slice.1, &self.pso_slice.0, &self.pipe_data);
     }
 
     fn update_drive_texture(
@@ -283,6 +283,7 @@ impl AcousticFiledSliceViewer {
                 (alpha * 255.) as u8,
             ]);
         }
+        dbg!(colors.len());
         let (_, texture_view) = factory
             .create_texture_immutable::<format::Rgba8>(
                 Kind::D1(colors.len() as u16),

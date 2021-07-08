@@ -121,7 +121,7 @@ impl SoundSourceViewer {
         self.models = vec![vecmath_util::mat4_scale(s); len];
     }
 
-    pub fn renderer(
+    pub fn update(
         &mut self,
         window: &mut PistonWindow,
         event: &Event,
@@ -174,22 +174,22 @@ impl SoundSourceViewer {
             }
         }
 
-        window.draw_3d(event, |window| {
-            for i in 0..self.pipe_data_list.len() {
-                window.encoder.draw(
-                    &self.pso_slice.1,
-                    &self.pso_slice.0,
-                    &self.pipe_data_list[i],
-                );
+        if event.resize_args().is_some() {
+            for pipe_data in &mut self.pipe_data_list {
+                pipe_data.out_color = window.output_color.clone();
+                pipe_data.out_depth = window.output_stencil.clone();
             }
+        }
+    }
 
-            if event.resize_args().is_some() {
-                for pipe_data in &mut self.pipe_data_list {
-                    pipe_data.out_color = window.output_color.clone();
-                    pipe_data.out_depth = window.output_stencil.clone();
-                }
-            }
-        });
+    pub fn renderer(&mut self, window: &mut PistonWindow) {
+        for i in 0..self.pipe_data_list.len() {
+            window.encoder.draw(
+                &self.pso_slice.1,
+                &self.pso_slice.0,
+                &self.pipe_data_list[i],
+            );
+        }
     }
 
     fn initialize_pipe_data(

@@ -4,15 +4,15 @@
  * Created Date: 01/05/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 07/07/2021
+ * Last Modified: 08/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
  *
  */
 
-use acoustic_field_viewer::view::UpdateHandler;
-use piston_window::{Button, Key};
+use acoustic_field_viewer::view::{UpdateFlag, ViewWindow};
+use piston_window::{Button, Event, Key, PressEvent};
 
 use crate::{camera_helper, ui::UICommand, Vector3};
 
@@ -33,14 +33,19 @@ impl ViewController {
         }
     }
 
-    pub fn update(&mut self, update_handler: &mut UpdateHandler, button: Option<Button>) {
+    pub fn update(
+        &mut self,
+        view_window: &mut ViewWindow,
+        e: &Event,
+        update_flag: &mut UpdateFlag,
+    ) {
         let travel = 5.0;
-        match button {
+        match e.press_args() {
             Some(Button::Keyboard(Key::Up)) => {
-                Self::camera_move(update_handler, [0., travel, 0.]);
+                Self::camera_move(view_window, [0., travel, 0.], update_flag);
             }
             Some(Button::Keyboard(Key::Down)) => {
-                Self::camera_move(update_handler, [0., -travel, 0.]);
+                Self::camera_move(view_window, [0., -travel, 0.], update_flag);
             }
             _ => (),
         }
@@ -48,18 +53,18 @@ impl ViewController {
         if let Ok(d) = self.from_ui.try_recv() {
             match d {
                 UICommand::CameraMove(t) => {
-                    Self::camera_move(update_handler, vecmath::vec3_cast(t))
+                    Self::camera_move(view_window, vecmath::vec3_cast(t), update_flag)
                 }
-                UICommand::CameraMoveTo(t) => Self::camera_move_to(update_handler, t),
-                UICommand::CameraRotate(t) => Self::camera_rotate(update_handler, t),
+                UICommand::CameraMoveTo(t) => Self::camera_move_to(view_window, t, update_flag),
+                UICommand::CameraRotate(t) => Self::camera_rotate(view_window, t, update_flag),
                 UICommand::CameraSetPosture { right, up } => {
-                    Self::camera_set_posture(update_handler, right, up)
+                    Self::camera_set_posture(view_window, right, up, update_flag)
                 }
-                UICommand::SliceMove(t) => Self::slice_move(update_handler, t),
+                UICommand::SliceMove(t) => Self::slice_move(view_window, t, update_flag),
                 UICommand::CameraUpdate => self.is_init = true,
-                UICommand::SliceRotate(t) => Self::slice_rotate(update_handler, t),
+                UICommand::SliceRotate(t) => Self::slice_rotate(view_window, t, update_flag),
                 UICommand::SliceSetPosture { right, up } => {
-                    Self::slice_set_posture(update_handler, right, up)
+                    Self::slice_set_posture(view_window, right, up, update_flag)
                 }
                 _ => (),
             }
@@ -67,60 +72,73 @@ impl ViewController {
 
         if self.is_init {
             self.to_ui
-                .send(UICommand::CameraPos(update_handler.camera.position))
+                .send(UICommand::CameraPos(view_window.camera.position))
                 .unwrap();
             self.to_ui
                 .send(UICommand::SlicePos(
-                    update_handler.field_slice_viewer.position(),
+                    view_window.field_slice_viewer.position(),
                 ))
                 .unwrap();
             self.to_ui
                 .send(UICommand::SliceSetPosture {
-                    right: update_handler.field_slice_viewer.right(),
-                    up: update_handler.field_slice_viewer.up(),
+                    right: view_window.field_slice_viewer.right(),
+                    up: view_window.field_slice_viewer.up(),
                 })
                 .unwrap();
             self.to_ui
                 .send(UICommand::CameraSetPosture {
-                    right: update_handler.camera.right,
-                    up: update_handler.camera.up,
+                    right: view_window.camera.right,
+                    up: view_window.camera.up,
                 })
                 .unwrap();
             self.is_init = false;
         }
     }
 
-    pub fn camera_move(update_handler: &mut UpdateHandler, t: Vector3) {
-        camera_helper::camera_move(&mut update_handler.camera, t);
-        update_handler.update_camera_pos();
+    fn camera_move(view_window: &mut ViewWindow, t: Vector3, update_flag: &mut UpdateFlag) {
+        camera_helper::camera_move(&mut view_window.camera, t);
+        *update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
     }
 
-    pub fn camera_move_to(update_handler: &mut UpdateHandler, t: Vector3) {
-        camera_helper::camera_move_to(&mut update_handler.camera, t);
-        update_handler.update_camera_pos();
+    fn camera_move_to(view_window: &mut ViewWindow, t: Vector3, update_flag: &mut UpdateFlag) {
+        camera_helper::camera_move_to(&mut view_window.camera, t);
+        *update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
     }
 
-    pub fn camera_rotate(update_handler: &mut UpdateHandler, t: Vector3) {
-        camera_helper::camera_rotate(&mut update_handler.camera, t, 0.01);
-        update_handler.update_camera_pos();
+    fn camera_rotate(view_window: &mut ViewWindow, t: Vector3, update_flag: &mut UpdateFlag) {
+        camera_helper::camera_rotate(&mut view_window.camera, t, 0.01);
+        *update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
     }
 
-    pub fn camera_set_posture(update_handler: &mut UpdateHandler, right: Vector3, up: Vector3) {
-        update_handler.camera.right = right;
-        update_handler.camera.up = up;
-        update_handler.camera.forward = vecmath::vec3_cross(right, up);
-        update_handler.update_camera_pos();
+    fn camera_set_posture(
+        view_window: &mut ViewWindow,
+        right: Vector3,
+        up: Vector3,
+        update_flag: &mut UpdateFlag,
+    ) {
+        view_window.camera.right = right;
+        view_window.camera.up = up;
+        view_window.camera.forward = vecmath::vec3_cross(right, up);
+        *update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
     }
 
-    pub fn slice_move(update_handler: &mut UpdateHandler, t: Vector3) {
-        update_handler.field_slice_viewer.translate(t);
+    fn slice_move(view_window: &mut ViewWindow, t: Vector3, update_flag: &mut UpdateFlag) {
+        view_window.field_slice_viewer.translate(t);
+        *update_flag |= UpdateFlag::UPDATE_SLICE_POS;
     }
 
-    pub fn slice_rotate(update_handler: &mut UpdateHandler, axis: Vector3) {
-        update_handler.field_slice_viewer.rotate(axis, 0.05);
+    fn slice_rotate(view_window: &mut ViewWindow, axis: Vector3, update_flag: &mut UpdateFlag) {
+        view_window.field_slice_viewer.rotate(axis, 0.05);
+        *update_flag |= UpdateFlag::UPDATE_SLICE_POS;
     }
 
-    pub fn slice_set_posture(update_handler: &mut UpdateHandler, right: Vector3, up: Vector3) {
-        update_handler.field_slice_viewer.set_posture(right, up);
+    fn slice_set_posture(
+        view_window: &mut ViewWindow,
+        right: Vector3,
+        up: Vector3,
+        update_flag: &mut UpdateFlag,
+    ) {
+        view_window.field_slice_viewer.set_posture(right, up);
+        *update_flag |= UpdateFlag::UPDATE_SLICE_POS;
     }
 }
