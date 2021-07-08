@@ -79,7 +79,7 @@ impl Interface {
         if_not_open_or_cannot_read!(self.is_open, return);
         write_rwlock!(self.is_open, false);
 
-        let socket = UdpSocket::bind("0.0.0.0:8080").unwrap();
+        let socket = UdpSocket::bind("127.0.0.1:8080").unwrap();
         socket.send_to(&[0x00], &self.addr).unwrap();
 
         if let Some(handle) = self.th_handle.take() {

@@ -14,6 +14,7 @@
 use crate::Vector3;
 
 #[allow(dead_code)]
+#[derive(Debug)]
 pub struct Modulation {
     pub(crate) mod_data: Vec<u8>,
 }
@@ -31,6 +32,7 @@ pub struct Geometry {
     pub up: Vector3,
 }
 
+#[derive(Debug)]
 pub enum AUTDData {
     Modulation(Modulation),
     Gain(Gain),

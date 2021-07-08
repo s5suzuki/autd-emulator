@@ -4,7 +4,7 @@
  * Created Date: 29/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 07/07/2021
+ * Last Modified: 08/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -61,10 +61,9 @@ pub fn parse(raw_buf: Vec<u8>) -> Vec<AUTDData> {
 pub fn parse_as_geometry(buf: &[u8]) -> Vec<Geometry> {
     let mut res = Vec::new();
     for bytes in buf.chunks_exact(std::mem::size_of::<Geometry>()) {
-        let mut cursor = 0;
-        let origin = to_vec3(&bytes, &mut cursor);
-        let right = to_vec3(&bytes, &mut cursor);
-        let up = to_vec3(&bytes, &mut cursor);
+        let origin = to_vec3(&bytes[0..12]);
+        let right = to_vec3(&bytes[12..24]);
+        let up = to_vec3(&bytes[24..36]);
         res.push(Geometry { origin, right, up });
     }
     res
@@ -89,15 +88,13 @@ pub fn parse_as_gain(buf: &[u8]) -> Gain {
     Gain { amps, phases }
 }
 
-fn to_vec3(buf: &[u8], cursor: &mut usize) -> Vector3 {
-    let x = to_f32(buf, cursor);
-    let y = to_f32(buf, cursor);
-    let z = to_f32(buf, cursor);
+fn to_vec3(buf: &[u8]) -> Vector3 {
+    let x = to_f32(&buf[0..4]);
+    let y = to_f32(&buf[4..8]);
+    let z = to_f32(&buf[8..12]);
     [x, y, z]
 }
 
-fn to_f32(buf: &[u8], cursor: &mut usize) -> f32 {
-    let i = *cursor;
-    *cursor += 4;
-    f32::from_ne_bytes([buf[i], buf[i + 1], buf[i + 2], buf[i + 3]])
+fn to_f32(buf: &[u8]) -> f32 {
+    f32::from_ne_bytes([buf[0], buf[1], buf[2], buf[3]])
 }
