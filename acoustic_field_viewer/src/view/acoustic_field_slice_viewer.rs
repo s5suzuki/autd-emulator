@@ -23,14 +23,14 @@ use gfx::{
     traits::*,
     BlendTarget, DepthTarget, Global, PipelineState, Slice, TextureSampler, VertexBuffer,
 };
-use gfx_device_gl::Resources;
-use piston_window::*;
+use gfx_device_gl::{CommandBuffer, Resources};
+use glutin::event::{Event, WindowEvent};
 use scarlet::{color::RGBColor, colormap::ColorMap};
-use shader_version::{glsl::GLSL, Shaders};
+use shader_version::{glsl::GLSL, OpenGL, Shaders};
 
 use crate::{
     sound_source::SoundSource,
-    view::{UpdateFlag, ViewerSettings},
+    view::{render_system, render_system::RenderSystem, UpdateFlag, ViewerSettings},
     Matrix4, Vector3,
 };
 
@@ -78,11 +78,11 @@ pub struct AcousticFiledSliceViewer {
 impl AcousticFiledSliceViewer {
     pub fn new(
         model: Matrix4,
-        window: &PistonWindow,
+        renderer_sys: &RenderSystem,
         opengl: OpenGL,
         settings: &ViewerSettings,
     ) -> AcousticFiledSliceViewer {
-        let factory = &mut window.factory.clone();
+        let factory = &mut renderer_sys.factory.clone();
 
         let (width, height) = settings.size;
 
@@ -109,8 +109,8 @@ impl AcousticFiledSliceViewer {
                 factory,
                 vertex_buffer,
                 drive_view,
-                window.output_color.clone(),
-                window.output_stencil.clone(),
+                renderer_sys.output_color.clone(),
+                renderer_sys.output_stencil.clone(),
             ),
             model,
             pso_slice: Self::initialize_shader(factory, glsl, slice),
@@ -158,8 +158,8 @@ impl AcousticFiledSliceViewer {
 
     pub fn update(
         &mut self,
-        window: &mut PistonWindow,
-        event: &Event,
+        renderer_sys: &mut RenderSystem,
+        event: &Event<()>,
         view_projection: (Matrix4, Matrix4),
         settings: &ViewerSettings,
         sources: &[SoundSource],
@@ -168,7 +168,7 @@ impl AcousticFiledSliceViewer {
         if update_flag.contains(UpdateFlag::UPDATE_SOURCE_DRIVE) {
             AcousticFiledSliceViewer::update_drive_texture(
                 &mut self.pipe_data,
-                &mut window.factory,
+                &mut renderer_sys.factory,
                 sources,
             );
         }
@@ -177,7 +177,7 @@ impl AcousticFiledSliceViewer {
             self.pipe_data.u_trans_num = sources.len() as f32;
             AcousticFiledSliceViewer::update_position_texture(
                 &mut self.pipe_data,
-                &mut window.factory,
+                &mut renderer_sys.factory,
                 sources,
             );
         }
@@ -188,7 +188,7 @@ impl AcousticFiledSliceViewer {
             let alpha = settings.slice_alpha;
             AcousticFiledSliceViewer::update_color_map_texture(
                 &mut self.pipe_data,
-                &mut window.factory,
+                &mut renderer_sys.factory,
                 &colors,
                 alpha,
             );
@@ -207,16 +207,19 @@ impl AcousticFiledSliceViewer {
                 model_view_projection(self.model, view_projection.0, view_projection.1);
         }
 
-        if event.resize_args().is_some() {
-            self.pipe_data.out_color = window.output_color.clone();
-            self.pipe_data.out_depth = window.output_stencil.clone();
+        if let Event::WindowEvent { event, .. } = event {
+            if let WindowEvent::Resized(_) = event {
+                self.pipe_data.out_color = renderer_sys.output_color.clone();
+                self.pipe_data.out_depth = renderer_sys.output_stencil.clone();
+            }
         }
     }
 
-    pub fn renderer(&mut self, window: &mut PistonWindow) {
-        window
-            .encoder
-            .draw(&self.pso_slice.1, &self.pso_slice.0, &self.pipe_data);
+    pub fn renderer(
+        &mut self,
+        encoder: &mut gfx::Encoder<render_system::types::Resources, CommandBuffer>,
+    ) {
+        encoder.draw(&self.pso_slice.1, &self.pso_slice.0, &self.pipe_data);
     }
 
     fn update_drive_texture(

@@ -12,15 +12,20 @@ checksum = "d9fe5e32de01730eb1f6b7f5b51c17e03e2325bf40a74f754f04f130043affff"
 name = "acoustic_field_viewer"
 version = "0.2.0"
 dependencies = [
+ "anyhow",
+ "autd3-core",
  "bitflags",
  "camera_controllers",
- "conrod",
- "conrod_core",
- "conrod_piston",
  "find_folder",
  "gfx",
+ "gfx_core",
  "gfx_device_gl",
- "piston_window",
+ "glutin",
+ "image",
+ "imgui",
+ "imgui-gfx-renderer",
+ "imgui-winit-support",
+ "old_school_gfx_glutin_ext",
  "quaternion",
  "rand",
  "scarlet",
@@ -239,6 +244,12 @@ checksum = "0ced0551234e87afee12411d535648dd89d2e7f34c78b753395567aff3d447ff"
 dependencies = [
  "libc",
 ]
+
+[[package]]
+name = "chlorine"
+version = "1.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bd650552110e39b7c5058986cf177decd3365841836578ac50a286094eac0be6"
 
 [[package]]
 name = "clipboard-win"
@@ -911,6 +922,48 @@ dependencies = [
 ]
 
 [[package]]
+name = "imgui"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "24cfcf6e3326886321c5d637caf1ce217006651059015fae372b1c49c0e722b2"
+dependencies = [
+ "bitflags",
+ "imgui-sys",
+ "parking_lot",
+]
+
+[[package]]
+name = "imgui-gfx-renderer"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2c5a5042b07fc73ef731c1e63ffdb983e27aba687059a125afe6d037834a687d"
+dependencies = [
+ "gfx",
+ "imgui",
+ "winapi 0.3.8",
+]
+
+[[package]]
+name = "imgui-sys"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "85ca00be6b78bf02b57e91468cf19d08dfcc11d0fb3c2f3dc491c29404d8d330"
+dependencies = [
+ "cc",
+ "chlorine",
+]
+
+[[package]]
+name = "imgui-winit-support"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "22ae881a42852470216c77fba5835b9701815adac24dfaa8d4ebf3a368376756"
+dependencies = [
+ "imgui",
+ "winit",
+]
+
+[[package]]
 name = "instant"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1498,6 +1551,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c92d4ddb4bd7b50d730c215ff871754d0da6b2178849f8a2a2ab69712d0c073b"
 dependencies = [
  "objc",
+]
+
+[[package]]
+name = "old_school_gfx_glutin_ext"
+version = "0.26.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "450a2a0e6805771787b965af9a552581c9dfc588dc33761c1be690117cd792e1"
+dependencies = [
+ "gfx_core",
+ "gfx_device_gl",
+ "glutin",
 ]
 
 [[package]]
