@@ -13,10 +13,10 @@
 
 mod settings;
 
-use std::{f32::consts::PI, time::Instant};
+use std::{collections::VecDeque, f32::consts::PI, time::Instant};
 
 use acoustic_field_viewer::{
-    view::{AcousticFiledSliceViewer, SoundSourceViewer, System, UpdateFlag, ViewerSettings},
+    view::{AcousticFiledSliceViewer, SoundSourceViewer, System, UpdateFlag},
     Matrix3, Vector3,
 };
 use autd3_emulator_server::{AUTDData, AUTDServer};
@@ -55,6 +55,25 @@ fn rot_mat_to_euler_angles(mat: &Matrix3) -> Vector3 {
     }
 }
 
+fn log(log_buf: &mut VecDeque<String>, msg: &str, setting: &Setting) {
+    if setting.log_enable {
+        let date = chrono::Local::now();
+        log_buf.push_back(format!("{}: {}", date.format("%Y-%m-%d %H:%M:%S.%3f"), msg));
+        while log_buf.len() > setting.log_max as usize {
+            log_buf.pop_front();
+        }
+    }
+}
+
+fn get_log_txt(log_buf: &VecDeque<String>) -> String {
+    let mut log = String::new();
+    for line in log_buf {
+        log.push_str(line);
+        log.push('\n');
+    }
+    log
+}
+
 pub fn main() {
     let mut setting = Setting::load("setting.json");
     let init_setting = setting;
@@ -63,6 +82,8 @@ pub fn main() {
 
     let mut sources = Vec::new();
     let mut last_amp = Vec::new();
+
+    let mut log_buf = VecDeque::new();
 
     let system = System::init(
         "AUTD3 emulator",
@@ -143,6 +164,7 @@ pub fn main() {
                                 sources.push(trans);
                             }
                         }
+                        log(&mut log_buf, "geometry", &setting);
                         update_flag |= UpdateFlag::UPDATE_SOURCE_POS;
                         update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
                     }
@@ -156,6 +178,7 @@ pub fn main() {
                             source.amp = (amp as f32 / 510.0 * std::f32::consts::PI).sin();
                             source.phase = 2.0 * PI * (1.0 - (phase as f32 / 255.0));
                         }
+                        log(&mut log_buf, "gain", &setting);
                         update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
                     }
                     AUTDData::Clear => {
@@ -163,6 +186,7 @@ pub fn main() {
                             source.amp = 0.;
                             source.phase = 0.;
                         }
+                        log(&mut log_buf, "clear", &setting);
                         update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
                     }
                     AUTDData::Pause => {
@@ -171,6 +195,7 @@ pub fn main() {
                             last_amp.push(source.amp);
                             source.amp = 0.;
                         }
+                        log(&mut log_buf, "pause", &setting);
                         update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
                     }
                     AUTDData::Resume => {
@@ -178,6 +203,7 @@ pub fn main() {
                             source.amp = amp;
                         }
                         last_amp.clear();
+                        log(&mut log_buf, "resume", &setting);
                         update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
                     }
                     _ => (),
@@ -295,6 +321,15 @@ pub fn main() {
                     update_flag |= UpdateFlag::UPDATE_WAVENUM;
                 }
             });
+            TabItem::new(im_str!("Log")).build(&ui, || {
+                if ui.radio_button_bool(im_str!("enable"), setting.log_enable) {
+                    setting.log_enable = !setting.log_enable;
+                }
+                Slider::new(im_str!("Max"))
+                    .range(0..=1000)
+                    .build(&ui, &mut setting.log_max);
+                ui.text(get_log_txt(&log_buf));
+            });
         });
 
         ui.separator();
@@ -338,8 +373,10 @@ pub fn main() {
 
         ui.same_line(0.);
         if ui.small_button(im_str!("default")) {
-            let mut default_setting = ViewerSettings::default();
-            default_setting.wave_length = setting.viewer_setting.wave_length;
+            let default_setting = acoustic_field_viewer::view::ViewerSettings {
+                wave_length: setting.viewer_setting.wave_length,
+                ..Default::default()
+            };
             setting.viewer_setting = default_setting;
             reset = true;
         }

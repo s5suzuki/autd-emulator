@@ -11,6 +11,7 @@ acoustic_field_viewer = {path="../acoustic_field_viewer"}
 autd3-core = "1.5.0"
 autd3_emulator_server = {path="../autd3-emulator-server"}
 camera_controllers = "0.32.0"
+chrono = "0.4.19"
 find_folder = "0.3.0"
 gfx = "0.18.2"
 gfx_core = "0.9.2"

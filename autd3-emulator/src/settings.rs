@@ -25,6 +25,8 @@ pub struct Setting {
     pub window_width: u32,
     pub window_height: u32,
     pub viewer_setting: ViewerSettings,
+    pub log_enable: bool,
+    pub log_max: u32,
 }
 
 impl Setting {
@@ -34,6 +36,8 @@ impl Setting {
             window_width: 960,
             window_height: 640,
             viewer_setting: ViewerSettings::new(),
+            log_enable: true,
+            log_max: 100,
         }
     }
 
