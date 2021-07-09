@@ -4,7 +4,7 @@
  * Created Date: 27/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 08/07/2021
+ * Last Modified: 09/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -119,7 +119,6 @@ impl SoundSourceViewer {
     pub fn update(
         &mut self,
         render_sys: &mut RenderSystem,
-        event: &Event<()>,
         view_projection: (Matrix4, Matrix4),
         settings: &ViewerSettings,
         sources: &[SoundSource],
@@ -168,7 +167,9 @@ impl SoundSourceViewer {
                     model_view_projection(self.models[i], view_projection.0, view_projection.1);
             }
         }
+    }
 
+    pub fn handle_event(&mut self, render_sys: &RenderSystem, event: &Event<()>) {
         if let Event::WindowEvent { event, .. } = event {
             if let WindowEvent::Resized(_) = event {
                 for pipe_data in &mut self.pipe_data_list {

@@ -4,7 +4,7 @@
  * Created Date: 27/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 08/07/2021
+ * Last Modified: 09/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -31,7 +31,7 @@ use shader_version::{glsl::GLSL, OpenGL, Shaders};
 use crate::{
     sound_source::SoundSource,
     view::{render_system, render_system::RenderSystem, UpdateFlag, ViewerSettings},
-    Matrix4, Vector3,
+    Matrix4, Vector3, Vector4,
 };
 
 gfx_vertex_struct!(Vertex {
@@ -77,7 +77,6 @@ pub struct AcousticFiledSliceViewer {
 
 impl AcousticFiledSliceViewer {
     pub fn new(
-        model: Matrix4,
         renderer_sys: &RenderSystem,
         opengl: OpenGL,
         settings: &ViewerSettings,
@@ -112,7 +111,7 @@ impl AcousticFiledSliceViewer {
                 renderer_sys.output_color.clone(),
                 renderer_sys.output_stencil.clone(),
             ),
-            model,
+            model: vecmath_util::mat4_scale(1.0),
             pso_slice: Self::initialize_shader(factory, glsl, slice),
         }
     }
@@ -130,10 +129,15 @@ impl AcousticFiledSliceViewer {
         self.model[2] = vecmath_util::to_vec4(forward);
     }
 
-    pub fn rotate(&mut self, axis: Vector3, rot: f32) {
-        let rot = quaternion::axis_angle(axis, rot);
-        let rotm = vecmath_util::mat4_rot(rot);
-        self.model = vecmath::col_mat4_mul(self.model, rotm);
+    pub fn move_to(&mut self, pos: Vector4) {
+        self.model[3] = pos;
+    }
+
+    pub fn rotate_to(&mut self, euler_angle: Vector3) {
+        let rot = quaternion::euler_angles(euler_angle[0], euler_angle[1], euler_angle[2]);
+        let mut model = vecmath_util::mat4_rot(rot);
+        model[3] = self.model[3];
+        self.model = model;
     }
 
     pub fn model(&self) -> Matrix4 {
@@ -159,7 +163,6 @@ impl AcousticFiledSliceViewer {
     pub fn update(
         &mut self,
         renderer_sys: &mut RenderSystem,
-        event: &Event<()>,
         view_projection: (Matrix4, Matrix4),
         settings: &ViewerSettings,
         sources: &[SoundSource],
@@ -206,7 +209,9 @@ impl AcousticFiledSliceViewer {
             self.pipe_data.u_model_view_proj =
                 model_view_projection(self.model, view_projection.0, view_projection.1);
         }
+    }
 
+    pub fn handle_event(&mut self, renderer_sys: &RenderSystem, event: &Event<()>) {
         if let Event::WindowEvent { event, .. } = event {
             if let WindowEvent::Resized(_) = event {
                 self.pipe_data.out_color = renderer_sys.output_color.clone();
@@ -286,7 +291,6 @@ impl AcousticFiledSliceViewer {
                 (alpha * 255.) as u8,
             ]);
         }
-        dbg!(colors.len());
         let (_, texture_view) = factory
             .create_texture_immutable::<format::Rgba8>(
                 Kind::D1(colors.len() as u16),

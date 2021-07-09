@@ -7,8 +7,10 @@ mod common;
 pub mod sound_source;
 pub mod view;
 
-type Vector3 = vecmath::Vector3<f32>;
-type Matrix4 = vecmath::Matrix4<f32>;
+pub type Vector3 = vecmath::Vector3<f32>;
+pub type Vector4 = vecmath::Vector4<f32>;
+pub type Matrix3 = vecmath::Matrix3<f32>;
+pub type Matrix4 = vecmath::Matrix4<f32>;
 
 pub use common::color;
 pub use common::coloring_method;

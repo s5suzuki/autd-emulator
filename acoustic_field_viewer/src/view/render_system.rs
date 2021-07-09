@@ -4,17 +4,22 @@
  * Created Date: 08/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 08/07/2021
+ * Last Modified: 09/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
  *
  */
 
+use std::f32::consts::PI;
+
+use camera_controllers::{Camera, CameraPerspective, FirstPerson, FirstPersonSettings};
 use glutin::{event_loop::EventLoop, window::WindowBuilder};
 use imgui::Context;
 use imgui_gfx_renderer::{Renderer, Shaders};
 use old_school_gfx_glutin_ext::*;
+
+use crate::Matrix4;
 
 type ColorFormat = gfx::format::Srgba8;
 type DepthFormat = gfx::format::DepthStencil;
@@ -33,6 +38,10 @@ pub struct RenderSystem {
     pub factory: types::Factory,
     pub output_color: gfx::handle::RenderTargetView<types::Resources, ColorFormat>,
     pub output_stencil: gfx::handle::DepthStencilView<types::Resources, DepthFormat>,
+    pub camera: Camera<f32>,
+    pub fov: f32,
+    pub near_clip: f32,
+    pub far_clip: f32,
 }
 
 impl RenderSystem {
@@ -63,6 +72,11 @@ impl RenderSystem {
         let shaders = Shaders::GlSl400;
         let renderer =
             Renderer::init(imgui, &mut factory, shaders).expect("Failed to initialize renderer");
+
+        let mut camera =
+            FirstPerson::new([0., -500.0, 120.0], FirstPersonSettings::keyboard_wasd()).camera(0.);
+        camera.set_yaw_pitch(0., -std::f32::consts::PI / 2.0);
+
         Self {
             renderer,
             windowed_context,
@@ -70,6 +84,10 @@ impl RenderSystem {
             factory,
             output_color,
             output_stencil,
+            camera,
+            fov: 60.0 * PI / 180.0,
+            near_clip: 0.1,
+            far_clip: 1000.0,
         }
     }
     pub fn window(&self) -> &glutin::window::Window {
@@ -81,5 +99,26 @@ impl RenderSystem {
     }
     pub fn swap_buffers(&mut self) {
         self.windowed_context.swap_buffers().unwrap();
+    }
+
+    pub fn get_projection(&self) -> Matrix4 {
+        let draw_size = self.windowed_context.window().inner_size();
+        CameraPerspective {
+            fov: self.fov / PI * 180.0,
+            near_clip: self.near_clip,
+            far_clip: self.far_clip,
+            aspect_ratio: (draw_size.width as f32) / (draw_size.height as f32),
+        }
+        .projection()
+    }
+
+    pub fn get_view(&self) -> Matrix4 {
+        self.camera.orthogonal()
+    }
+
+    pub fn get_view_projection(&self) -> (Matrix4, Matrix4) {
+        let projection = self.get_projection();
+        let view = self.get_view();
+        (view, projection)
     }
 }
