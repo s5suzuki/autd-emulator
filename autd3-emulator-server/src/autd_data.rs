@@ -4,12 +4,15 @@
  * Created Date: 07/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 08/07/2021
+ * Last Modified: 09/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
  *
  */
+
+use acoustic_field_viewer::sound_source::SoundSource;
+use autd3_core::hardware_defined::{NUM_TRANS_X, NUM_TRANS_Y, TRANS_SPACING_MM};
 
 use crate::Vector3;
 
@@ -40,4 +43,25 @@ pub enum AUTDData {
     Clear,
     Pause,
     Resume,
+}
+
+impl Geometry {
+    pub fn make_autd_transducers(&self) -> Vec<SoundSource> {
+        let mut transducers = Vec::new();
+        for y in 0..NUM_TRANS_Y {
+            for x in 0..NUM_TRANS_X {
+                if autd3_core::hardware_defined::is_missing_transducer(x, y) {
+                    continue;
+                }
+                let x_dir = vecmath::vec3_scale(self.right, TRANS_SPACING_MM as f32 * x as f32);
+                let y_dir = vecmath::vec3_scale(self.up, TRANS_SPACING_MM as f32 * y as f32);
+                let zdir = vecmath::vec3_cross(self.right, self.up);
+                let pos = self.origin;
+                let pos = vecmath::vec3_add(pos, x_dir);
+                let pos = vecmath::vec3_add(pos, y_dir);
+                transducers.push(SoundSource::new(pos, zdir, 0.0, 0.0));
+            }
+        }
+        transducers
+    }
 }

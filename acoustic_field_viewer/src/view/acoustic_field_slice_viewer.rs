@@ -25,7 +25,10 @@ use gfx::{
 };
 use gfx_device_gl::{CommandBuffer, Resources};
 use glutin::event::{Event, WindowEvent};
-use scarlet::{color::RGBColor, colormap::ColorMap};
+use scarlet::{
+    color::RGBColor,
+    colormap::{ColorMap, ListedColorMap},
+};
 use shader_version::{glsl::GLSL, OpenGL, Shaders};
 
 use crate::{
@@ -72,7 +75,9 @@ gfx_pipeline!( pipe {
 pub struct AcousticFiledSliceViewer {
     pipe_data: pipe::Data<Resources>,
     model: Matrix4,
-    pso_slice: (PipelineState<Resources, pipe::Meta>, Slice<Resources>),
+    pso: PipelineState<Resources, pipe::Meta>,
+    slice: Slice<Resources>,
+    field_color_map: ListedColorMap,
 }
 
 impl AcousticFiledSliceViewer {
@@ -83,25 +88,11 @@ impl AcousticFiledSliceViewer {
     ) -> AcousticFiledSliceViewer {
         let factory = &mut renderer_sys.factory.clone();
 
-        let (width, height) = settings.size;
-
-        let wl = (-width / 2).clamp(-32768, 0) as i16;
-        let wr = ((width + 1) / 2).clamp(0, 32767) as i16;
-        let hb = (-height / 2).clamp(-32768, 0) as i16;
-        let ht = ((height + 1) / 2).clamp(0, 32767) as i16;
-        let vertex_data = vec![
-            Vertex::new([wl, hb, 0]),
-            Vertex::new([wr, hb, 0]),
-            Vertex::new([wr, ht, 0]),
-            Vertex::new([wl, ht, 0]),
-        ];
-        let index_data: &[u16] = &[0, 1, 2, 2, 3, 0];
-        let (vertex_buffer, slice) =
-            factory.create_vertex_buffer_with_slice(&vertex_data, index_data);
-
         let glsl = opengl.to_glsl();
 
         let drive_view = AcousticFiledSliceViewer::generate_empty_view(factory);
+
+        let (vertex_buffer, slice) = Self::initialize_vertex_buf_and_slice(factory, settings);
 
         AcousticFiledSliceViewer {
             pipe_data: Self::initialize_pipe_data(
@@ -112,7 +103,9 @@ impl AcousticFiledSliceViewer {
                 renderer_sys.output_stencil.clone(),
             ),
             model: vecmath_util::mat4_scale(1.0),
-            pso_slice: Self::initialize_shader(factory, glsl, slice),
+            pso: Self::initialize_shader(factory, glsl),
+            slice,
+            field_color_map: scarlet::colormap::ListedColorMap::inferno(),
         }
     }
 
@@ -168,6 +161,13 @@ impl AcousticFiledSliceViewer {
         sources: &[SoundSource],
         update_flag: UpdateFlag,
     ) {
+        if update_flag.contains(UpdateFlag::UPDATE_SLICE_SIZE) {
+            let (vertex_buffer, slice) =
+                Self::initialize_vertex_buf_and_slice(&mut renderer_sys.factory, settings);
+            self.pipe_data.vertex_buffer = vertex_buffer;
+            self.slice = slice;
+        }
+
         if update_flag.contains(UpdateFlag::UPDATE_SOURCE_DRIVE) {
             AcousticFiledSliceViewer::update_drive_texture(
                 &mut self.pipe_data,
@@ -187,7 +187,7 @@ impl AcousticFiledSliceViewer {
 
         if update_flag.contains(UpdateFlag::UPDATE_COLOR_MAP) {
             let iter = (0..100).map(|x| x as f64 / 100.0);
-            let colors = settings.field_color_map.transform(iter);
+            let colors = self.field_color_map.transform(iter);
             let alpha = settings.slice_alpha;
             AcousticFiledSliceViewer::update_color_map_texture(
                 &mut self.pipe_data,
@@ -204,6 +204,7 @@ impl AcousticFiledSliceViewer {
 
         if update_flag.contains(UpdateFlag::UPDATE_CAMERA_POS)
             || update_flag.contains(UpdateFlag::UPDATE_SLICE_POS)
+            || update_flag.contains(UpdateFlag::UPDATE_SLICE_SIZE)
         {
             self.pipe_data.u_model = self.model;
             self.pipe_data.u_model_view_proj =
@@ -212,11 +213,13 @@ impl AcousticFiledSliceViewer {
     }
 
     pub fn handle_event(&mut self, renderer_sys: &RenderSystem, event: &Event<()>) {
-        if let Event::WindowEvent { event, .. } = event {
-            if let WindowEvent::Resized(_) = event {
-                self.pipe_data.out_color = renderer_sys.output_color.clone();
-                self.pipe_data.out_depth = renderer_sys.output_stencil.clone();
-            }
+        if let Event::WindowEvent {
+            event: WindowEvent::Resized(_),
+            ..
+        } = event
+        {
+            self.pipe_data.out_color = renderer_sys.output_color.clone();
+            self.pipe_data.out_depth = renderer_sys.output_stencil.clone();
         }
     }
 
@@ -224,7 +227,7 @@ impl AcousticFiledSliceViewer {
         &mut self,
         encoder: &mut gfx::Encoder<render_system::types::Resources, CommandBuffer>,
     ) {
-        encoder.draw(&self.pso_slice.1, &self.pso_slice.0, &self.pipe_data);
+        encoder.draw(&self.slice, &self.pso, &self.pipe_data);
     }
 
     fn update_drive_texture(
@@ -232,6 +235,9 @@ impl AcousticFiledSliceViewer {
         factory: &mut gfx_device_gl::Factory,
         sources: &[SoundSource],
     ) {
+        if sources.is_empty() {
+            return;
+        }
         let sampler_info = SamplerInfo::new(FilterMethod::Scale, WrapMode::Tile);
         let mut texels = Vec::with_capacity(sources.len());
         for source in sources {
@@ -257,6 +263,9 @@ impl AcousticFiledSliceViewer {
         factory: &mut gfx_device_gl::Factory,
         sources: &[SoundSource],
     ) {
+        if sources.is_empty() {
+            return;
+        }
         let sampler_info = SamplerInfo::new(FilterMethod::Scale, WrapMode::Tile);
         let size = sources.len();
         let kind = Kind::D1(size as u16);
@@ -301,6 +310,28 @@ impl AcousticFiledSliceViewer {
         data.u_color_map = (texture_view, factory.create_sampler(sampler_info));
     }
 
+    fn initialize_vertex_buf_and_slice(
+        factory: &mut gfx_device_gl::Factory,
+        settings: &ViewerSettings,
+    ) -> (Buffer<Resources, Vertex>, Slice<Resources>) {
+        let width = settings.slice_width;
+        let height = settings.slice_height;
+
+        let wl = (-width / 2).clamp(-32768, 0) as i16;
+        let wr = ((width + 1) / 2).clamp(0, 32767) as i16;
+        let hb = (-height / 2).clamp(-32768, 0) as i16;
+        let ht = ((height + 1) / 2).clamp(0, 32767) as i16;
+        let vertex_data = vec![
+            Vertex::new([wl, hb, 0]),
+            Vertex::new([wr, hb, 0]),
+            Vertex::new([wr, ht, 0]),
+            Vertex::new([wl, ht, 0]),
+        ];
+        let index_data: &[u16] = &[0, 1, 2, 2, 3, 0];
+
+        factory.create_vertex_buffer_with_slice(&vertex_data, index_data)
+    }
+
     fn initialize_pipe_data(
         factory: &mut gfx_device_gl::Factory,
         vertex_buffer: Buffer<Resources, Vertex>,
@@ -343,31 +374,27 @@ impl AcousticFiledSliceViewer {
     fn initialize_shader(
         factory: &mut gfx_device_gl::Factory,
         version: GLSL,
-        slice: Slice<Resources>,
-    ) -> (PipelineState<Resources, pipe::Meta>, Slice<Resources>) {
-        (
-            factory
-                .create_pipeline_simple(
-                    Shaders::new()
-                        .set(
-                            GLSL::V4_50,
-                            include_str!("../../../assets/shaders/slice.vert"),
-                        )
-                        .get(version)
-                        .unwrap()
-                        .as_bytes(),
-                    Shaders::new()
-                        .set(
-                            GLSL::V4_50,
-                            include_str!("../../../assets/shaders/slice.frag"),
-                        )
-                        .get(version)
-                        .unwrap()
-                        .as_bytes(),
-                    pipe::new(),
-                )
-                .unwrap(),
-            slice,
-        )
+    ) -> PipelineState<Resources, pipe::Meta> {
+        factory
+            .create_pipeline_simple(
+                Shaders::new()
+                    .set(
+                        GLSL::V4_50,
+                        include_str!("../../../assets/shaders/slice.vert"),
+                    )
+                    .get(version)
+                    .unwrap()
+                    .as_bytes(),
+                Shaders::new()
+                    .set(
+                        GLSL::V4_50,
+                        include_str!("../../../assets/shaders/slice.frag"),
+                    )
+                    .get(version)
+                    .unwrap()
+                    .as_bytes(),
+                pipe::new(),
+            )
+            .unwrap()
     }
 }

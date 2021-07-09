@@ -21,6 +21,8 @@ use old_school_gfx_glutin_ext::*;
 
 use crate::Matrix4;
 
+use super::ViewerSettings;
+
 type ColorFormat = gfx::format::Srgba8;
 type DepthFormat = gfx::format::DepthStencil;
 type EventsLoop = EventLoop<()>;
@@ -39,9 +41,6 @@ pub struct RenderSystem {
     pub output_color: gfx::handle::RenderTargetView<types::Resources, ColorFormat>,
     pub output_stencil: gfx::handle::DepthStencilView<types::Resources, DepthFormat>,
     pub camera: Camera<f32>,
-    pub fov: f32,
-    pub near_clip: f32,
-    pub far_clip: f32,
 }
 
 impl RenderSystem {
@@ -85,9 +84,6 @@ impl RenderSystem {
             output_color,
             output_stencil,
             camera,
-            fov: 60.0 * PI / 180.0,
-            near_clip: 0.1,
-            far_clip: 1000.0,
         }
     }
     pub fn window(&self) -> &glutin::window::Window {
@@ -101,12 +97,12 @@ impl RenderSystem {
         self.windowed_context.swap_buffers().unwrap();
     }
 
-    pub fn get_projection(&self) -> Matrix4 {
+    pub fn get_projection(&self, settings: &ViewerSettings) -> Matrix4 {
         let draw_size = self.windowed_context.window().inner_size();
         CameraPerspective {
-            fov: self.fov / PI * 180.0,
-            near_clip: self.near_clip,
-            far_clip: self.far_clip,
+            fov: settings.fov / PI * 180.0,
+            near_clip: settings.near_clip,
+            far_clip: settings.far_clip,
             aspect_ratio: (draw_size.width as f32) / (draw_size.height as f32),
         }
         .projection()
@@ -116,8 +112,8 @@ impl RenderSystem {
         self.camera.orthogonal()
     }
 
-    pub fn get_view_projection(&self) -> (Matrix4, Matrix4) {
-        let projection = self.get_projection();
+    pub fn get_view_projection(&self, settings: &ViewerSettings) -> (Matrix4, Matrix4) {
+        let projection = self.get_projection(settings);
         let view = self.get_view();
         (view, projection)
     }

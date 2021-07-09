@@ -30,6 +30,7 @@ use glutin::event::{Event, WindowEvent};
 use shader_version::{glsl::GLSL, OpenGL, Shaders};
 
 use crate::{
+    coloring_method::{coloring_hsv, ColoringMethod},
     common::texture::create_texture_resource,
     sound_source::SoundSource,
     view::{render_system, render_system::RenderSystem, UpdateFlag, ViewerSettings},
@@ -74,6 +75,7 @@ pub struct SoundSourceViewer {
     models: Vec<Matrix4>,
     vertex_buffer: Buffer<Resources, Vertex>,
     view: ShaderResourceView<Resources, [f32; 4]>,
+    coloring_method: ColoringMethod,
 }
 
 impl SoundSourceViewer {
@@ -107,6 +109,7 @@ impl SoundSourceViewer {
             models: vec![],
             vertex_buffer,
             view,
+            coloring_method: coloring_hsv,
         }
     }
 
@@ -137,10 +140,9 @@ impl SoundSourceViewer {
                 );
             }
 
-            let coloring_method = settings.trans_coloring;
             for (i, source) in sources.iter().enumerate() {
                 self.pipe_data_list[i].i_color =
-                    coloring_method(source.phase / (2.0 * PI), source.amp);
+                    (self.coloring_method)(source.phase / (2.0 * PI), source.amp);
             }
         }
 
@@ -170,12 +172,14 @@ impl SoundSourceViewer {
     }
 
     pub fn handle_event(&mut self, render_sys: &RenderSystem, event: &Event<()>) {
-        if let Event::WindowEvent { event, .. } = event {
-            if let WindowEvent::Resized(_) = event {
-                for pipe_data in &mut self.pipe_data_list {
-                    pipe_data.out_color = render_sys.output_color.clone();
-                    pipe_data.out_depth = render_sys.output_stencil.clone();
-                }
+        if let Event::WindowEvent {
+            event: WindowEvent::Resized(_),
+            ..
+        } = event
+        {
+            for pipe_data in &mut self.pipe_data_list {
+                pipe_data.out_color = render_sys.output_color.clone();
+                pipe_data.out_depth = render_sys.output_stencil.clone();
             }
         }
     }

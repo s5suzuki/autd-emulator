@@ -14,7 +14,6 @@
 use std::{f32::consts::PI, time::Instant};
 
 use acoustic_field_viewer::{
-    coloring_method::coloring_hsv,
     sound_source::SoundSource,
     view::{AcousticFiledSliceViewer, SoundSourceViewer, System, UpdateFlag, ViewerSettings},
     Matrix3, Vector3,
@@ -84,14 +83,21 @@ pub fn main() {
     const FOCAL_POS: Vector3 = [TRANS_SIZE * 8.5, TRANS_SIZE * 6.5, 150.];
     const CAMERA_POS: Vector3 = [0., -500.0, 120.0];
 
-    let mut settings = ViewerSettings::new(
-        40e3,
-        WAVE_LENGTH,
-        TRANS_SIZE,
-        coloring_hsv,
-        scarlet::colormap::ListedColorMap::inferno(),
-        (VIEW_SLICE_WIDTH, VIEW_SLICE_HEIGHT),
-    );
+    let mut settings = ViewerSettings::new();
+    settings.frequency = 40e3;
+    settings.source_size = TRANS_SIZE;
+    settings.wave_length = WAVE_LENGTH;
+    settings.color_scale = COLOR_SCALE;
+    settings.slice_alpha = SLICE_ALPHA;
+    settings.slice_width = VIEW_SLICE_WIDTH;
+    settings.slice_height = VIEW_SLICE_HEIGHT;
+    settings.slice_pos = [FOCAL_POS[0], FOCAL_POS[1], FOCAL_POS[2], 1.0];
+    settings.slice_angle = SLICE_ANGLE;
+    settings.camera_pos = CAMERA_POS;
+    settings.camera_angle = CAMERA_ANGLE;
+    settings.fov = FOV;
+    settings.near_clip = NEAR_CLIP;
+    settings.far_clip = FAR_CLIP;
 
     let mut focal_pos = FOCAL_POS;
     let mut sources = Vec::new();
@@ -117,26 +123,16 @@ pub fn main() {
         ..
     } = system;
 
-    let mut slice_angle = SLICE_ANGLE;
-    let mut slice_pos = [focal_pos[0], focal_pos[1], focal_pos[2], 1.0];
     let opengl = OpenGL::V4_5;
     let mut sound_source_viewer = SoundSourceViewer::new(&render_sys, opengl);
     let mut field_slice_viewer = AcousticFiledSliceViewer::new(&render_sys, opengl, &settings);
-    field_slice_viewer.move_to(slice_pos);
-    field_slice_viewer.rotate_to(slice_angle);
+    field_slice_viewer.move_to(settings.slice_pos);
+    field_slice_viewer.rotate_to(settings.slice_angle);
 
-    render_sys.camera.position = CAMERA_POS;
-    let mut camera_angle = CAMERA_ANGLE;
-    set_camera_angle(&mut render_sys.camera, camera_angle);
+    render_sys.camera.position = settings.camera_pos;
+    set_camera_angle(&mut render_sys.camera, settings.camera_angle);
 
-    render_sys.fov = FOV;
-    render_sys.near_clip = NEAR_CLIP;
-    render_sys.far_clip = FAR_CLIP;
-
-    settings.color_scale = COLOR_SCALE;
-    settings.slice_alpha = SLICE_ALPHA;
-
-    let mut view_projection = render_sys.get_view_projection();
+    let mut view_projection = render_sys.get_view_projection(&settings);
     let mut last_frame = Instant::now();
     let mut run = true;
     let mut init = true;
@@ -207,21 +203,24 @@ pub fn main() {
             });
             TabItem::new(im_str!("Slice")).build(&ui, || {
                 ui.text(im_str!("Slice position"));
-                slice_changed = Drag::new(im_str!("Slice X")).build(&ui, &mut slice_pos[0]);
-                slice_changed |= Drag::new(im_str!("Slice Y")).build(&ui, &mut slice_pos[1]);
-                slice_changed |= Drag::new(im_str!("Slice Z")).build(&ui, &mut slice_pos[2]);
+                slice_changed =
+                    Drag::new(im_str!("Slice X")).build(&ui, &mut settings.slice_pos[0]);
+                slice_changed |=
+                    Drag::new(im_str!("Slice Y")).build(&ui, &mut settings.slice_pos[1]);
+                slice_changed |=
+                    Drag::new(im_str!("Slice Z")).build(&ui, &mut settings.slice_pos[2]);
 
                 ui.separator();
                 ui.text(im_str!("Slice Rotation"));
                 rot_changed = AngleSlider::new(im_str!("Slice RX"))
                     .range_degrees(0.0..=360.0)
-                    .build(&ui, &mut slice_angle[0]);
+                    .build(&ui, &mut settings.slice_angle[0]);
                 rot_changed |= AngleSlider::new(im_str!("Slice RY"))
                     .range_degrees(0.0..=360.0)
-                    .build(&ui, &mut slice_angle[1]);
+                    .build(&ui, &mut settings.slice_angle[1]);
                 rot_changed |= AngleSlider::new(im_str!("Slice RZ"))
                     .range_degrees(0.0..=360.0)
-                    .build(&ui, &mut slice_angle[2]);
+                    .build(&ui, &mut settings.slice_angle[2]);
 
                 ui.separator();
                 ui.text(im_str!("Slice color setting"));
@@ -234,17 +233,17 @@ pub fn main() {
 
                 ui.separator();
                 if ui.small_button(im_str!("xy")) {
-                    slice_angle = [0., 0., 0.];
+                    settings.slice_angle = [0., 0., 0.];
                     rot_changed = true;
                 }
                 ui.same_line(0.);
                 if ui.small_button(im_str!("yz")) {
-                    slice_angle = [0., -PI / 2., 0.];
+                    settings.slice_angle = [0., -PI / 2., 0.];
                     rot_changed = true;
                 }
                 ui.same_line(0.);
                 if ui.small_button(im_str!("zx")) {
-                    slice_angle = [PI / 2., 0., 0.];
+                    settings.slice_angle = [PI / 2., 0., 0.];
                     rot_changed = true;
                 }
             });
@@ -260,31 +259,35 @@ pub fn main() {
                 ui.text(im_str!("Camera rotation"));
                 camera_update |= AngleSlider::new(im_str!("Camera RX"))
                     .range_degrees(-180.0..=180.0)
-                    .build(&ui, &mut camera_angle[0]);
+                    .build(&ui, &mut settings.camera_angle[0]);
                 camera_update |= AngleSlider::new(im_str!("Camera RY"))
                     .range_degrees(-180.0..=180.0)
-                    .build(&ui, &mut camera_angle[1]);
+                    .build(&ui, &mut settings.camera_angle[1]);
                 camera_update |= AngleSlider::new(im_str!("Camera RZ"))
                     .range_degrees(-180.0..=180.0)
-                    .build(&ui, &mut camera_angle[2]);
+                    .build(&ui, &mut settings.camera_angle[2]);
                 ui.separator();
                 ui.text(im_str!("Camera perspective"));
                 camera_update |= AngleSlider::new(im_str!("FOV"))
                     .range_degrees(0.0..=180.0)
-                    .build(&ui, &mut render_sys.fov);
+                    .build(&ui, &mut settings.fov);
                 camera_update |= Drag::new(im_str!("Near clip"))
                     .range(0.0..=f32::INFINITY)
-                    .build(&ui, &mut render_sys.near_clip);
+                    .build(&ui, &mut settings.near_clip);
                 camera_update |= Drag::new(im_str!("Far clip"))
                     .range(0.0..=f32::INFINITY)
-                    .build(&ui, &mut render_sys.far_clip);
+                    .build(&ui, &mut settings.far_clip);
             });
         });
 
         ui.separator();
 
         if ui.small_button(im_str!("auto")) {
-            let rot = quaternion::euler_angles(slice_angle[0], slice_angle[1], slice_angle[2]);
+            let rot = quaternion::euler_angles(
+                settings.slice_angle[0],
+                settings.slice_angle[1],
+                settings.slice_angle[2],
+            );
             let model = vecmath_util::mat4_rot(rot);
 
             let right = vecmath_util::to_vec3(&model[0]);
@@ -292,13 +295,16 @@ pub fn main() {
             let forward = vecmath::vec3_cross(right, up);
 
             let d = vecmath::vec3_scale(forward, 500.);
-            let p = vecmath::vec3_add(vecmath_util::to_vec3(&slice_pos), d);
+            let p = vecmath::vec3_add(vecmath_util::to_vec3(&settings.slice_pos), d);
 
+            settings.camera_pos = p;
             render_sys.camera.position = p;
             render_sys.camera.right = right;
             render_sys.camera.up = up;
-            render_sys.camera.look_at(vecmath_util::to_vec3(&slice_pos));
-            camera_angle = rot_mat_to_euler_angles(&[
+            render_sys
+                .camera
+                .look_at(vecmath_util::to_vec3(&settings.slice_pos));
+            settings.camera_angle = rot_mat_to_euler_angles(&[
                 render_sys.camera.right,
                 render_sys.camera.up,
                 render_sys.camera.forward,
@@ -309,16 +315,25 @@ pub fn main() {
         ui.same_line(0.);
         if ui.small_button(im_str!("reset")) {
             focal_pos = FOCAL_POS;
+
+            settings.frequency = 40e3;
+            settings.source_size = TRANS_SIZE;
             settings.wave_length = WAVE_LENGTH;
-            slice_angle = SLICE_ANGLE;
-            slice_pos = [focal_pos[0], focal_pos[1], focal_pos[2], 1.0];
             settings.color_scale = COLOR_SCALE;
             settings.slice_alpha = SLICE_ALPHA;
-            render_sys.camera.position = CAMERA_POS;
-            camera_angle = CAMERA_ANGLE;
-            render_sys.fov = FOV;
-            render_sys.near_clip = NEAR_CLIP;
-            render_sys.far_clip = FAR_CLIP;
+            settings.slice_width = VIEW_SLICE_WIDTH;
+            settings.slice_height = VIEW_SLICE_HEIGHT;
+            settings.slice_pos = [FOCAL_POS[0], FOCAL_POS[1], FOCAL_POS[2], 1.0];
+            settings.slice_angle = SLICE_ANGLE;
+            settings.camera_pos = CAMERA_POS;
+            settings.camera_angle = CAMERA_ANGLE;
+            settings.fov = FOV;
+            settings.near_clip = NEAR_CLIP;
+            settings.far_clip = FAR_CLIP;
+
+            render_sys.camera.position = settings.camera_pos;
+            set_camera_angle(&mut render_sys.camera, settings.camera_angle);
+
             focus_changed = true;
             slice_changed = true;
             rot_changed = true;
@@ -334,12 +349,12 @@ pub fn main() {
         }
 
         if slice_changed {
-            field_slice_viewer.move_to(slice_pos);
+            field_slice_viewer.move_to(settings.slice_pos);
             update_flag |= UpdateFlag::UPDATE_SLICE_POS;
         }
 
         if rot_changed {
-            field_slice_viewer.rotate_to(slice_angle);
+            field_slice_viewer.rotate_to(settings.slice_angle);
             update_flag |= UpdateFlag::UPDATE_SLICE_POS;
         }
 
@@ -348,9 +363,10 @@ pub fn main() {
         }
 
         if camera_update {
-            set_camera_angle(&mut render_sys.camera, camera_angle);
+            render_sys.camera.position = settings.camera_pos;
+            set_camera_angle(&mut render_sys.camera, settings.camera_angle);
 
-            view_projection = render_sys.get_view_projection();
+            view_projection = render_sys.get_view_projection(&settings);
             update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
         }
 

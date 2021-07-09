@@ -4,7 +4,7 @@
  * Created Date: 08/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 08/07/2021
+ * Last Modified: 09/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -33,13 +33,7 @@ pub fn create_texture_resource<P: AsRef<Path>, F: gfx::Factory<R>, R: gfx::Resou
         factory: &mut F,
         kind: gfx::texture::Kind,
         data: &[&[u8]],
-    ) -> Result<
-        (
-            gfx::handle::Texture<R, T::Surface>,
-            gfx::handle::ShaderResourceView<R, T::View>,
-        ),
-        anyhow::Error,
-    >
+    ) -> Result<gfx::handle::ShaderResourceView<R, T::View>, anyhow::Error>
     where
         F: gfx::Factory<R>,
         R: gfx::Resources,
@@ -54,7 +48,7 @@ pub fn create_texture_resource<P: AsRef<Path>, F: gfx::Factory<R>, R: gfx::Resou
         let num_slices = kind.get_num_slices().unwrap_or(1) as usize;
         let num_faces = if kind.is_cube() { 6 } else { 1 };
         let desc = texture::Info {
-            kind: kind,
+            kind,
             levels: (data.len() / (num_slices * num_faces)) as texture::Level,
             format: surface,
             bind: Bind::SHADER_RESOURCE,
@@ -66,7 +60,7 @@ pub fn create_texture_resource<P: AsRef<Path>, F: gfx::Factory<R>, R: gfx::Resou
         let tex = Typed::new(raw);
         let view =
             factory.view_texture_as_shader_resource::<T>(&tex, levels, format::Swizzle::new())?;
-        Ok((tex, view))
+        Ok(view)
     }
 
     let (width, height) = (width as u16, height as u16);
@@ -78,7 +72,7 @@ pub fn create_texture_resource<P: AsRef<Path>, F: gfx::Factory<R>, R: gfx::Resou
     sampler_info.wrap_mode.1 = wrap_mode_v;
     sampler_info.border = [0.0, 0.0, 0.0, 1.0].into();
 
-    let (_, view) = create_texture::<Srgba8, F, R>(factory, tex_kind, &[&img])?;
+    let view = create_texture::<Srgba8, F, R>(factory, tex_kind, &[&img])?;
 
     Ok(view)
 }
