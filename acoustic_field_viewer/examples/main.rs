@@ -4,7 +4,7 @@
  * Created Date: 27/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 09/07/2021
+ * Last Modified: 10/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -113,7 +113,6 @@ pub fn main() {
     }
     calc_focus_phase(focal_pos, &mut sources, &settings);
 
-    let system = System::init("example", WINDOW_WIDTH, WINDOW_HEIGHT);
     let System {
         mut events_loop,
         mut imgui,
@@ -121,7 +120,7 @@ pub fn main() {
         mut render_sys,
         mut encoder,
         ..
-    } = system;
+    } = System::init("example", WINDOW_WIDTH, WINDOW_HEIGHT);
 
     let opengl = OpenGL::V4_5;
     let mut sound_source_viewer = SoundSourceViewer::new(&render_sys, opengl);
@@ -200,6 +199,14 @@ pub fn main() {
                 focus_changed |= Drag::new(im_str!("Wavelength"))
                     .range(0.0..=f32::INFINITY)
                     .build(&ui, &mut settings.wave_length);
+
+                ui.separator();
+                if Slider::new(im_str!("Transducer alpha"))
+                    .range(0.0..=1.0)
+                    .build(&ui, &mut settings.source_alpha)
+                {
+                    update_flag |= UpdateFlag::UPDATE_SOURCE_ALPHA;
+                }
             });
             TabItem::new(im_str!("Slice")).build(&ui, || {
                 ui.text(im_str!("Slice position"));
@@ -250,11 +257,11 @@ pub fn main() {
             TabItem::new(im_str!("Camera")).build(&ui, || {
                 ui.text(im_str!("Camera pos"));
                 camera_update =
-                    Drag::new(im_str!("Camera X")).build(&ui, &mut render_sys.camera.position[0]);
+                    Drag::new(im_str!("Camera X")).build(&ui, &mut settings.camera_pos[0]);
                 camera_update |=
-                    Drag::new(im_str!("Camera Y")).build(&ui, &mut render_sys.camera.position[1]);
+                    Drag::new(im_str!("Camera Y")).build(&ui, &mut settings.camera_pos[1]);
                 camera_update |=
-                    Drag::new(im_str!("Camera Z")).build(&ui, &mut render_sys.camera.position[2]);
+                    Drag::new(im_str!("Camera Z")).build(&ui, &mut settings.camera_pos[2]);
                 ui.separator();
                 ui.text(im_str!("Camera rotation"));
                 camera_update |= AngleSlider::new(im_str!("Camera RX"))
@@ -387,8 +394,8 @@ pub fn main() {
             update_flag,
         );
 
-        encoder.clear(&mut render_sys.output_color, [0.3, 0.3, 0.3, 1.0]);
-        encoder.clear_depth(&mut render_sys.output_stencil, 1.0);
+        encoder.clear(&render_sys.output_color, [0.3, 0.3, 0.3, 1.0]);
+        encoder.clear_depth(&render_sys.output_stencil, 1.0);
         sound_source_viewer.renderer(&mut encoder);
         field_slice_viewer.renderer(&mut encoder);
 

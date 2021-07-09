@@ -20,5 +20,6 @@ bitflags! {
         const UPDATE_CAMERA_POS = 1 << 4;
         const UPDATE_SLICE_POS = 1 << 5;
         const UPDATE_SLICE_SIZE = 1 << 6;
+        const UPDATE_SOURCE_ALPHA = 1 << 7;
     }
 }

@@ -7,5 +7,5 @@ uniform sampler2D t_color;
 
 void main() {
     vec4 tex = texture(t_color, v_TexCoord);
-    o_Color = vec4(vec3(i_Color), tex.a);
+    o_Color = i_Color * tex;
 }

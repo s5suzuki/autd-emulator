@@ -4,7 +4,7 @@
  * Created Date: 06/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 09/07/2021
+ * Last Modified: 10/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -88,11 +88,6 @@ pub fn main() {
 
     let mut log_buf = VecDeque::new();
 
-    let system = System::init(
-        "AUTD3 emulator",
-        setting.window_width as _,
-        setting.window_height as _,
-    );
     let System {
         mut events_loop,
         mut imgui,
@@ -100,7 +95,11 @@ pub fn main() {
         mut render_sys,
         mut encoder,
         ..
-    } = system;
+    } = System::init(
+        "AUTD3 emulator",
+        setting.window_width as _,
+        setting.window_height as _,
+    );
 
     let opengl = OpenGL::V4_5;
     let mut sound_source_viewer = SoundSourceViewer::new(&render_sys, opengl);
@@ -294,8 +293,8 @@ pub fn main() {
 
                 ui.separator();
                 ui.text(im_str!("Slice color setting"));
-                color_changed = Slider::new(im_str!("Color scale"))
-                    .range(0.0..=10.0)
+                color_changed = Drag::new(im_str!("Color scale"))
+                    .speed(0.1)
                     .build(&ui, &mut setting.viewer_setting.color_scale);
                 color_changed |= Slider::new(im_str!("Slice alpha"))
                     .range(0.0..=1.0)
@@ -356,15 +355,18 @@ pub fn main() {
                 {
                     update_flag |= UpdateFlag::UPDATE_WAVENUM;
                 }
-            });
-            TabItem::new(im_str!("Log")).build(&ui, || {
-                if ui.radio_button_bool(im_str!("enable"), setting.log_enable) {
-                    setting.log_enable = !setting.log_enable;
+                ui.separator();
+                if Slider::new(im_str!("Transducer alpha"))
+                    .range(0.0..=1.0)
+                    .build(&ui, &mut setting.viewer_setting.source_alpha)
+                {
+                    update_flag |= UpdateFlag::UPDATE_SOURCE_ALPHA;
                 }
-                Slider::new(im_str!("Max"))
-                    .range(0..=1000)
-                    .build(&ui, &mut setting.log_max);
-                ui.text(get_log_txt(&log_buf));
+                ui.separator();
+                if ColorPicker::new(im_str!("Background"), &mut setting.background)
+                    .alpha(true)
+                    .build(&ui)
+                {}
             });
             TabItem::new(im_str!("Info")).build(&ui, || {
                 ui.text("Control flag");
@@ -475,6 +477,15 @@ pub fn main() {
                     ));
                 }
             });
+            TabItem::new(im_str!("Log")).build(&ui, || {
+                if ui.radio_button_bool(im_str!("enable"), setting.log_enable) {
+                    setting.log_enable = !setting.log_enable;
+                }
+                Slider::new(im_str!("Max"))
+                    .range(0..=1000)
+                    .build(&ui, &mut setting.log_max);
+                ui.text(get_log_txt(&log_buf));
+            });
         });
 
         ui.separator();
@@ -561,8 +572,6 @@ pub fn main() {
             update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
         }
 
-        /////
-
         sound_source_viewer.update(
             &mut render_sys,
             view_projection,
@@ -578,7 +587,7 @@ pub fn main() {
             update_flag,
         );
 
-        encoder.clear(&render_sys.output_color, [0.3, 0.3, 0.3, 1.0]);
+        encoder.clear(&render_sys.output_color, setting.background);
         encoder.clear_depth(&render_sys.output_stencil, 1.0);
         sound_source_viewer.renderer(&mut encoder);
         field_slice_viewer.renderer(&mut encoder);
@@ -603,80 +612,3 @@ pub fn main() {
 
     setting.save("setting.json");
 }
-
-// mod camera_helper;
-// mod color;
-// mod settings;
-// mod ui;
-// mod viewer_controller;
-
-// use std::{f32::consts::PI, sync::mpsc};
-
-// use crate::{settings::Setting, ui::UiView, viewer_controller::ViewController};
-// use acoustic_field_viewer::{
-//     sound_source::SoundSource,
-//     view::{UpdateFlag, ViewWindow},
-// };
-// use autd3_core::hardware_defined::{NUM_TRANS_X, NUM_TRANS_Y, TRANS_SPACING_MM};
-// use autd3_emulator_server::{AUTDData, AUTDServer, Geometry};
-// use piston_window::Window;
-
-// type Vector3 = vecmath::Vector3<f32>;
-// type Matrix4 = vecmath::Matrix4<f32>;
-
-// fn main() {
-//     let mut setting = Setting::load("setting.json");
-
-//     let mut autd_server = AUTDServer::new(&format!("127.0.0.1:{}", setting.port)).unwrap();
-
-//     let mut viewer_setting = setting.to_viewer_settings();
-//     viewer_setting.color_scale = 0.6;
-//     viewer_setting.slice_alpha = 0.95;
-
-//     let (mut field_view, mut field_window) = ViewWindow::new(
-//         setting.slice_model,
-//         &viewer_setting,
-//         [setting.window_width, setting.window_height],
-//     );
-
-//     let (from_ui, to_cnt) = mpsc::channel();
-//     let (from_cnt, to_ui) = mpsc::channel();
-//     let mut viewer_controller = ViewController::new(to_cnt, from_cnt);
-//     let (mut ui_view, mut ui_window) = UiView::new(to_ui, from_ui);
-
-//     let mut sources = Vec::new();
-//     let mut last_amp = Vec::new();
-
-//     let mut is_init = true;
-
-//     while let Some(e_field) = field_window.next() {
-//         // while let (Some(e_field), Some(e_ui)) = (field_window.next(), ui_window.next()) {
-//         let mut update_flag = UpdateFlag::empty();
-//         if is_init {
-//             update_flag |= UpdateFlag::UPDATE_SLICE_POS;
-//             update_flag |= UpdateFlag::UPDATE_COLOR_MAP;
-//             update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
-//             update_flag |= UpdateFlag::UPDATE_WAVENUM;
-//             is_init = false;
-//         }
-
-//         // viewer_controller.update(&mut field_view, &e_field, &mut &mut update_flag);
-//         field_view.renderer(
-//             &mut field_window,
-//             e_field,
-//             &viewer_setting,
-//             &sources,
-//             update_flag,
-//         );
-//         // ui_view.renderer(&mut ui_window, e_ui);
-//     }
-
-//     autd_server.close();
-
-//     setting.slice_model = field_view.get_slice_model();
-
-//     let current_size = field_window.size();
-//     setting.window_width = current_size.width as u32;
-//     setting.window_height = current_size.height as u32;
-//     setting.save("setting.json");
-// }

@@ -4,7 +4,7 @@
  * Created Date: 27/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 09/07/2021
+ * Last Modified: 10/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -143,6 +143,12 @@ impl SoundSourceViewer {
             for (i, source) in sources.iter().enumerate() {
                 self.pipe_data_list[i].i_color =
                     (self.coloring_method)(source.phase / (2.0 * PI), source.amp);
+            }
+        }
+
+        if update_flag.contains(UpdateFlag::UPDATE_SOURCE_ALPHA) {
+            for pipe_data in self.pipe_data_list.iter_mut() {
+                pipe_data.i_color[3] = settings.source_alpha;
             }
         }
 
