@@ -4,46 +4,65 @@
  * Created Date: 27/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 07/07/2021
+ * Last Modified: 09/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
  *
  */
 
-use crate::common::coloring_method::ColoringMethod;
-use scarlet::colormap::ListedColorMap;
+use std::f32::consts::PI;
 
-#[derive(Debug, Clone)]
+use crate::{Vector3, Vector4};
+use autd3_core::hardware_defined::TRANS_SPACING_MM;
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct ViewerSettings {
     pub frequency: f32,
     pub source_size: f32,
     pub wave_length: f32,
-    pub trans_coloring: ColoringMethod,
-    pub field_color_map: ListedColorMap,
     pub color_scale: f32,
     pub slice_alpha: f32,
-    pub size: (i32, i32),
+    pub slice_width: i32,
+    pub slice_height: i32,
+    pub slice_pos: Vector4,
+    pub slice_angle: Vector3,
+    pub camera_pos: Vector3,
+    pub camera_angle: Vector3,
+    pub fov: f32,
+    pub near_clip: f32,
+    pub far_clip: f32,
 }
 
 impl ViewerSettings {
-    pub fn new(
-        frequency: f32,
-        wave_length: f32,
-        source_size: f32,
-        trans_coloring: ColoringMethod,
-        field_color_map: ListedColorMap,
-        size: (i32, i32),
-    ) -> ViewerSettings {
+    pub fn new() -> ViewerSettings {
+        Self::default()
+    }
+}
+
+impl Default for ViewerSettings {
+    fn default() -> Self {
         ViewerSettings {
-            frequency,
-            source_size,
-            wave_length,
-            trans_coloring,
-            field_color_map,
-            color_scale: 1.0,
-            slice_alpha: 1.0,
-            size,
+            frequency: autd3_core::hardware_defined::ULTRASOUND_FREQUENCY as _,
+            source_size: autd3_core::hardware_defined::TRANS_SPACING_MM as _,
+            color_scale: 0.6,
+            slice_alpha: 0.95,
+            wave_length: 8.5,
+            slice_width: 400,
+            slice_height: 300,
+            slice_pos: [
+                TRANS_SPACING_MM as f32 * 8.5,
+                TRANS_SPACING_MM as f32 * 6.5,
+                150.,
+                1.,
+            ],
+            slice_angle: [PI / 2., 0., 0.],
+            camera_pos: [0., -500.0, 200.0],
+            camera_angle: [PI / 2., 0., 0.],
+            fov: 60. * PI / 180.0,
+            near_clip: 0.,
+            far_clip: 1000.,
         }
     }
 }

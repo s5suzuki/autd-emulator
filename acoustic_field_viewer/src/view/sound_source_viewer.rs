@@ -4,7 +4,7 @@
  * Created Date: 27/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 08/07/2021
+ * Last Modified: 09/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -25,13 +25,15 @@ use gfx::{
     traits::*,
     BlendTarget, DepthTarget, Global, PipelineState, Slice, TextureSampler, VertexBuffer,
 };
-use gfx_device_gl::Resources;
-use piston_window::*;
-use shader_version::{glsl::GLSL, Shaders};
+use gfx_device_gl::{CommandBuffer, Resources};
+use glutin::event::{Event, WindowEvent};
+use shader_version::{glsl::GLSL, OpenGL, Shaders};
 
 use crate::{
+    coloring_method::{coloring_hsv, ColoringMethod},
+    common::texture::create_texture_resource,
     sound_source::SoundSource,
-    view::{UpdateFlag, ViewerSettings},
+    view::{render_system, render_system::RenderSystem, UpdateFlag, ViewerSettings},
     Matrix4,
 };
 
@@ -73,11 +75,12 @@ pub struct SoundSourceViewer {
     models: Vec<Matrix4>,
     vertex_buffer: Buffer<Resources, Vertex>,
     view: ShaderResourceView<Resources, [f32; 4]>,
+    coloring_method: ColoringMethod,
 }
 
 impl SoundSourceViewer {
-    pub fn new(window: &mut PistonWindow, opengl: OpenGL) -> SoundSourceViewer {
-        let factory = &mut window.factory.clone();
+    pub fn new(render_sys: &RenderSystem, opengl: OpenGL) -> SoundSourceViewer {
+        let mut factory = render_sys.factory.clone();
 
         let vertex_data = vec![
             Vertex::new([-1, -1, 0], [0, 0]),
@@ -90,21 +93,15 @@ impl SoundSourceViewer {
             factory.create_vertex_buffer_with_slice(&vertex_data, index_data);
 
         let glsl = opengl.to_glsl();
-        let pso_slice = Self::initialize_shader(factory, glsl, slice);
+        let pso_slice = Self::initialize_shader(&mut factory, glsl, slice);
 
         let assets = find_folder::Search::ParentsThenKids(3, 3)
             .for_folder("assets")
             .unwrap();
-        let circle: G2dTexture = Texture::from_path(
-            &mut window.create_texture_context(),
-            assets.join("textures/circle.png"),
-            Flip::None,
-            &TextureSettings::new(),
-        )
-        .unwrap();
+        let view =
+            create_texture_resource(assets.join("textures/circle.png"), &mut factory).unwrap();
 
         let vertex_buffer = vertex_buffer;
-        let view = circle.view;
 
         SoundSourceViewer {
             pipe_data_list: vec![],
@@ -112,6 +109,7 @@ impl SoundSourceViewer {
             models: vec![],
             vertex_buffer,
             view,
+            coloring_method: coloring_hsv,
         }
     }
 
@@ -121,10 +119,9 @@ impl SoundSourceViewer {
         self.models = vec![vecmath_util::mat4_scale(s); len];
     }
 
-    pub fn renderer(
+    pub fn update(
         &mut self,
-        window: &mut PistonWindow,
-        event: &Event,
+        render_sys: &mut RenderSystem,
         view_projection: (Matrix4, Matrix4),
         settings: &ViewerSettings,
         sources: &[SoundSource],
@@ -132,21 +129,20 @@ impl SoundSourceViewer {
     ) {
         if update_flag.contains(UpdateFlag::UPDATE_SOURCE_DRIVE) {
             if self.pipe_data_list.len() != sources.len() {
-                let factory = &mut window.factory;
+                let factory = &mut render_sys.factory;
                 self.pipe_data_list = Self::initialize_pipe_data(
                     factory,
                     self.vertex_buffer.clone(),
                     self.view.clone(),
-                    window.output_color.clone(),
-                    window.output_stencil.clone(),
+                    render_sys.output_color.clone(),
+                    render_sys.output_stencil.clone(),
                     sources,
                 );
             }
 
-            let coloring_method = settings.trans_coloring;
             for (i, source) in sources.iter().enumerate() {
                 self.pipe_data_list[i].i_color =
-                    coloring_method(source.phase / (2.0 * PI), source.amp);
+                    (self.coloring_method)(source.phase / (2.0 * PI), source.amp);
             }
         }
 
@@ -173,23 +169,32 @@ impl SoundSourceViewer {
                     model_view_projection(self.models[i], view_projection.0, view_projection.1);
             }
         }
+    }
 
-        window.draw_3d(event, |window| {
-            for i in 0..self.pipe_data_list.len() {
-                window.encoder.draw(
-                    &self.pso_slice.1,
-                    &self.pso_slice.0,
-                    &self.pipe_data_list[i],
-                );
+    pub fn handle_event(&mut self, render_sys: &RenderSystem, event: &Event<()>) {
+        if let Event::WindowEvent {
+            event: WindowEvent::Resized(_),
+            ..
+        } = event
+        {
+            for pipe_data in &mut self.pipe_data_list {
+                pipe_data.out_color = render_sys.output_color.clone();
+                pipe_data.out_depth = render_sys.output_stencil.clone();
             }
+        }
+    }
 
-            if event.resize_args().is_some() {
-                for pipe_data in &mut self.pipe_data_list {
-                    pipe_data.out_color = window.output_color.clone();
-                    pipe_data.out_depth = window.output_stencil.clone();
-                }
-            }
-        });
+    pub fn renderer(
+        &mut self,
+        encoder: &mut gfx::Encoder<render_system::types::Resources, CommandBuffer>,
+    ) {
+        for i in 0..self.pipe_data_list.len() {
+            encoder.draw(
+                &self.pso_slice.1,
+                &self.pso_slice.0,
+                &self.pipe_data_list[i],
+            );
+        }
     }
 
     fn initialize_pipe_data(

@@ -1,82 +1,136 @@
-#[macro_use]
-extern crate conrod_core;
+/*
+ * File: main.rs
+ * Project: src
+ * Created Date: 06/07/2021
+ * Author: Shun Suzuki
+ * -----
+ * Last Modified: 09/07/2021
+ * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
+ * -----
+ * Copyright (c) 2021 Hapis Lab. All rights reserved.
+ *
+ */
 
-mod camera_helper;
-mod color;
 mod settings;
-mod ui;
-// mod viewer_controller;
 
-use std::{f32::consts::PI, sync::mpsc};
+use std::{f32::consts::PI, time::Instant};
 
-use crate::{settings::Setting, ui::UiView};
 use acoustic_field_viewer::{
-    coloring_method::coloring_hsv,
-    sound_source::SoundSource,
-    view::{UpdateFlag, ViewWindow, ViewerSettings},
+    view::{AcousticFiledSliceViewer, SoundSourceViewer, System, UpdateFlag, ViewerSettings},
+    Matrix3, Vector3,
 };
-use autd3_core::hardware_defined::{NUM_TRANS_X, NUM_TRANS_Y, TRANS_SPACING_MM};
-use autd3_emulator_server::{AUTDData, AUTDServer, Geometry};
-use piston_window::Window;
+use autd3_emulator_server::{AUTDData, AUTDServer};
+use camera_controllers::Camera;
+use gfx::Device;
+use glutin::{
+    event::{Event, WindowEvent},
+    event_loop::ControlFlow,
+    platform::run_return::EventLoopExtRunReturn,
+};
+use imgui::*;
+use shader_version::OpenGL;
 
-type Vector3 = vecmath::Vector3<f32>;
-type Matrix4 = vecmath::Matrix4<f32>;
+use crate::settings::Setting;
 
-fn make_autd_transducers(geo: Geometry) -> Vec<SoundSource> {
-    let mut transducers = Vec::new();
-    for y in 0..NUM_TRANS_Y {
-        for x in 0..NUM_TRANS_X {
-            if autd3_core::hardware_defined::is_missing_transducer(x, y) {
-                continue;
-            }
-            let x_dir = vecmath::vec3_scale(geo.right, TRANS_SPACING_MM as f32 * x as f32);
-            let y_dir = vecmath::vec3_scale(geo.up, TRANS_SPACING_MM as f32 * y as f32);
-            let zdir = vecmath::vec3_cross(geo.right, geo.up);
-            let pos = geo.origin;
-            let pos = vecmath::vec3_add(pos, x_dir);
-            let pos = vecmath::vec3_add(pos, y_dir);
-            transducers.push(SoundSource::new(pos, zdir, 0.0, 0.0));
-        }
-    }
-    transducers
+fn set_camera_angle(camera: &mut Camera<f32>, angle: Vector3) {
+    let rot = quaternion::euler_angles(angle[0], angle[1], angle[2]);
+    let model = vecmath_util::mat4_rot(rot);
+    camera.right = vecmath_util::to_vec3(&model[0]);
+    camera.up = vecmath_util::to_vec3(&model[1]);
+    camera.forward = vecmath_util::to_vec3(&model[2]);
 }
 
-fn main() {
+fn rot_mat_to_euler_angles(mat: &Matrix3) -> Vector3 {
+    let sy = (mat[0][0] * mat[0][0] + mat[1][0] * mat[1][0]).sqrt();
+    if sy < 1e-3 {
+        let x = (mat[1][1]).atan2(mat[1][2]);
+        let y = (mat[2][0]).atan2(sy);
+        let z = 0.;
+        [x, y, z]
+    } else {
+        let x = (-mat[2][1]).atan2(mat[2][2]);
+        let y = (-mat[2][0]).atan2(sy);
+        let z = (mat[1][0]).atan2(mat[0][0]);
+        [x, y, z]
+    }
+}
+
+pub fn main() {
     let mut setting = Setting::load("setting.json");
+    let init_setting = setting;
 
     let mut autd_server = AUTDServer::new(&format!("127.0.0.1:{}", setting.port)).unwrap();
-
-    let trans_mm = autd3_core::hardware_defined::TRANS_SPACING_MM as f32;
-    let mut settings = ViewerSettings::new(
-        40e3,
-        setting.wave_length,
-        trans_mm,
-        coloring_hsv,
-        scarlet::colormap::ListedColorMap::inferno(),
-        (setting.slice_width, setting.slice_height),
-    );
-    settings.color_scale = 0.6;
-    settings.slice_alpha = 0.95;
-
-    let (from_ui, to_cnt) = mpsc::channel();
-    let (from_cnt, to_ui) = mpsc::channel();
-
-    let (mut field_view, mut field_window) =
-        ViewWindow::new(&settings, [setting.window_width, setting.window_height]);
-
-    // let mut autd_event_handler = AUTDEventHandler::new(rx_autd_event);
-    // let mut viewer_controller = ViewController::new(to_cnt, from_cnt);
-    // let update = |update_handler: &mut UpdateHandler, button: Option<Button>| {
-    // autd_event_handler.update(update_handler);
-    // viewer_controller.update(update_handler, button);
-    // };
-    // field_view.update = Some(update);
 
     let mut sources = Vec::new();
     let mut last_amp = Vec::new();
 
-    let (mut ui_view, mut ui_window) = UiView::new(to_ui, from_ui);
-    while let (Some(e_field), Some(e_ui)) = (field_window.next(), ui_window.next()) {
+    let system = System::init(
+        "AUTD3 emulator",
+        setting.window_width as _,
+        setting.window_height as _,
+    );
+    let System {
+        mut events_loop,
+        mut imgui,
+        mut platform,
+        mut render_sys,
+        mut encoder,
+        ..
+    } = system;
+
+    let opengl = OpenGL::V4_5;
+    let mut sound_source_viewer = SoundSourceViewer::new(&render_sys, opengl);
+    let mut field_slice_viewer =
+        AcousticFiledSliceViewer::new(&render_sys, opengl, &setting.viewer_setting);
+    field_slice_viewer.move_to(setting.viewer_setting.slice_pos);
+    field_slice_viewer.rotate_to(setting.viewer_setting.slice_angle);
+
+    render_sys.camera.position = setting.viewer_setting.camera_pos;
+    set_camera_angle(&mut render_sys.camera, setting.viewer_setting.camera_angle);
+
+    let mut view_projection = render_sys.get_view_projection(&setting.viewer_setting);
+    let mut last_frame = Instant::now();
+    let mut run = true;
+    let mut init = true;
+    while run {
+        events_loop.run_return(|event, _, control_flow| {
+            if init {
+                sound_source_viewer.update(
+                    &mut render_sys,
+                    view_projection,
+                    &setting.viewer_setting,
+                    &sources,
+                    UpdateFlag::all(),
+                );
+                field_slice_viewer.update(
+                    &mut render_sys,
+                    view_projection,
+                    &setting.viewer_setting,
+                    &sources,
+                    UpdateFlag::all(),
+                );
+                render_sys.update_views();
+                init = false;
+            }
+
+            sound_source_viewer.handle_event(&render_sys, &event);
+            field_slice_viewer.handle_event(&render_sys, &event);
+            platform.handle_event(imgui.io_mut(), render_sys.window(), &event);
+            if let Event::WindowEvent { event, .. } = event {
+                match event {
+                    WindowEvent::Resized(_) => render_sys.update_views(),
+                    WindowEvent::CloseRequested => {
+                        run = false;
+                    }
+                    _ => (),
+                }
+            }
+            *control_flow = ControlFlow::Exit;
+        });
+        if !run {
+            break;
+        }
+
         let mut update_flag = UpdateFlag::empty();
 
         autd_server.update(|data| {
@@ -85,8 +139,7 @@ fn main() {
                     AUTDData::Geometries(geometries) => {
                         sources.clear();
                         for geometry in geometries {
-                            let transducers = make_autd_transducers(geometry);
-                            for trans in transducers {
+                            for trans in geometry.make_autd_transducers() {
                                 sources.push(trans);
                             }
                         }
@@ -110,6 +163,7 @@ fn main() {
                             source.amp = 0.;
                             source.phase = 0.;
                         }
+                        update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
                     }
                     AUTDData::Pause => {
                         last_amp.clear();
@@ -117,28 +171,330 @@ fn main() {
                             last_amp.push(source.amp);
                             source.amp = 0.;
                         }
+                        update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
                     }
                     AUTDData::Resume => {
                         for (source, &amp) in sources.iter_mut().zip(last_amp.iter()) {
                             source.amp = amp;
                         }
                         last_amp.clear();
+                        update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
                     }
                     _ => (),
                 }
             }
         });
 
-        field_view.renderer(&mut field_window, e_field, &settings, &sources, update_flag);
-        ui_view.renderer(&mut ui_window, e_ui);
+        let io = imgui.io_mut();
+        platform
+            .prepare_frame(io, render_sys.window())
+            .expect("Failed to start frame");
+        let now = Instant::now();
+        io.update_delta_time(now - last_frame);
+        last_frame = now;
+        let ui = imgui.frame();
+
+        let mut slice_size_changed = false;
+        let mut slice_geo_changed = false;
+        let mut rot_changed = false;
+        let mut color_changed = false;
+        let mut camera_update = false;
+        TabBar::new(im_str!("Settings")).build(&ui, || {
+            TabItem::new(im_str!("Slice")).build(&ui, || {
+                ui.text(im_str!("Slice size"));
+                slice_size_changed = Slider::new(im_str!("Slice width"))
+                    .range(0..=1000)
+                    .build(&ui, &mut setting.viewer_setting.slice_width);
+                slice_size_changed |= Slider::new(im_str!("Slice heigh"))
+                    .range(0..=1000)
+                    .build(&ui, &mut setting.viewer_setting.slice_height);
+
+                ui.separator();
+                ui.text(im_str!("Slice position"));
+                slice_geo_changed = Drag::new(im_str!("Slice X"))
+                    .build(&ui, &mut setting.viewer_setting.slice_pos[0]);
+                slice_geo_changed |= Drag::new(im_str!("Slice Y"))
+                    .build(&ui, &mut setting.viewer_setting.slice_pos[1]);
+                slice_geo_changed |= Drag::new(im_str!("Slice Z"))
+                    .build(&ui, &mut setting.viewer_setting.slice_pos[2]);
+
+                ui.separator();
+                ui.text(im_str!("Slice Rotation"));
+                rot_changed = AngleSlider::new(im_str!("Slice RX"))
+                    .range_degrees(0.0..=360.0)
+                    .build(&ui, &mut setting.viewer_setting.slice_angle[0]);
+                rot_changed |= AngleSlider::new(im_str!("Slice RY"))
+                    .range_degrees(0.0..=360.0)
+                    .build(&ui, &mut setting.viewer_setting.slice_angle[1]);
+                rot_changed |= AngleSlider::new(im_str!("Slice RZ"))
+                    .range_degrees(0.0..=360.0)
+                    .build(&ui, &mut setting.viewer_setting.slice_angle[2]);
+
+                ui.separator();
+                ui.text(im_str!("Slice color setting"));
+                color_changed = Slider::new(im_str!("Color scale"))
+                    .range(0.0..=10.0)
+                    .build(&ui, &mut setting.viewer_setting.color_scale);
+                color_changed |= Slider::new(im_str!("Slice alpha"))
+                    .range(0.0..=1.0)
+                    .build(&ui, &mut setting.viewer_setting.slice_alpha);
+
+                ui.separator();
+                if ui.small_button(im_str!("xy")) {
+                    setting.viewer_setting.slice_angle = [0., 0., 0.];
+                    rot_changed = true;
+                }
+                ui.same_line(0.);
+                if ui.small_button(im_str!("yz")) {
+                    setting.viewer_setting.slice_angle = [0., -PI / 2., 0.];
+                    rot_changed = true;
+                }
+                ui.same_line(0.);
+                if ui.small_button(im_str!("zx")) {
+                    setting.viewer_setting.slice_angle = [PI / 2., 0., 0.];
+                    rot_changed = true;
+                }
+            });
+            TabItem::new(im_str!("Camera")).build(&ui, || {
+                ui.text(im_str!("Camera pos"));
+                camera_update = Drag::new(im_str!("Camera X"))
+                    .build(&ui, &mut setting.viewer_setting.camera_pos[0]);
+                camera_update |= Drag::new(im_str!("Camera Y"))
+                    .build(&ui, &mut setting.viewer_setting.camera_pos[1]);
+                camera_update |= Drag::new(im_str!("Camera Z"))
+                    .build(&ui, &mut setting.viewer_setting.camera_pos[2]);
+                ui.separator();
+                ui.text(im_str!("Camera rotation"));
+                camera_update |= AngleSlider::new(im_str!("Camera RX"))
+                    .range_degrees(-180.0..=180.0)
+                    .build(&ui, &mut setting.viewer_setting.camera_angle[0]);
+                camera_update |= AngleSlider::new(im_str!("Camera RY"))
+                    .range_degrees(-180.0..=180.0)
+                    .build(&ui, &mut setting.viewer_setting.camera_angle[1]);
+                camera_update |= AngleSlider::new(im_str!("Camera RZ"))
+                    .range_degrees(-180.0..=180.0)
+                    .build(&ui, &mut setting.viewer_setting.camera_angle[2]);
+                ui.separator();
+                ui.text(im_str!("Camera perspective"));
+                camera_update |= AngleSlider::new(im_str!("FOV"))
+                    .range_degrees(0.0..=180.0)
+                    .build(&ui, &mut setting.viewer_setting.fov);
+                camera_update |= Drag::new(im_str!("Near clip"))
+                    .range(0.0..=f32::INFINITY)
+                    .build(&ui, &mut setting.viewer_setting.near_clip);
+                camera_update |= Drag::new(im_str!("Far clip"))
+                    .range(0.0..=f32::INFINITY)
+                    .build(&ui, &mut setting.viewer_setting.far_clip);
+            });
+            TabItem::new(im_str!("Config")).build(&ui, || {
+                if Drag::new(im_str!("Wavelength"))
+                    .speed(0.1)
+                    .range(0.0..=f32::INFINITY)
+                    .build(&ui, &mut setting.viewer_setting.wave_length)
+                {
+                    update_flag |= UpdateFlag::UPDATE_WAVENUM;
+                }
+            });
+        });
+
+        ui.separator();
+
+        if ui.small_button(im_str!("auto")) {
+            let rot = quaternion::euler_angles(
+                setting.viewer_setting.slice_angle[0],
+                setting.viewer_setting.slice_angle[1],
+                setting.viewer_setting.slice_angle[2],
+            );
+            let model = vecmath_util::mat4_rot(rot);
+
+            let right = vecmath_util::to_vec3(&model[0]);
+            let up = vecmath_util::to_vec3(&model[1]);
+            let forward = vecmath::vec3_cross(right, up);
+
+            let d = vecmath::vec3_scale(forward, 500.);
+            let p = vecmath::vec3_add(vecmath_util::to_vec3(&setting.viewer_setting.slice_pos), d);
+
+            setting.viewer_setting.camera_pos = p;
+            render_sys.camera.position = p;
+            render_sys.camera.right = right;
+            render_sys.camera.up = up;
+            render_sys
+                .camera
+                .look_at(vecmath_util::to_vec3(&setting.viewer_setting.slice_pos));
+            setting.viewer_setting.camera_angle = rot_mat_to_euler_angles(&[
+                render_sys.camera.right,
+                render_sys.camera.up,
+                render_sys.camera.forward,
+            ]);
+            camera_update = true;
+        }
+
+        let mut reset = false;
+        ui.same_line(0.);
+        if ui.small_button(im_str!("reset")) {
+            setting = init_setting;
+            reset = true;
+        }
+
+        ui.same_line(0.);
+        if ui.small_button(im_str!("default")) {
+            let mut default_setting = ViewerSettings::default();
+            default_setting.wave_length = setting.viewer_setting.wave_length;
+            setting.viewer_setting = default_setting;
+            reset = true;
+        }
+
+        if reset {
+            render_sys.camera.position = setting.viewer_setting.camera_pos;
+            slice_size_changed = true;
+            slice_geo_changed = true;
+            rot_changed = true;
+            color_changed = true;
+            camera_update = true;
+        }
+
+        if slice_size_changed {
+            update_flag |= UpdateFlag::UPDATE_SLICE_SIZE;
+        }
+
+        if slice_geo_changed {
+            field_slice_viewer.move_to(setting.viewer_setting.slice_pos);
+            update_flag |= UpdateFlag::UPDATE_SLICE_POS;
+        }
+
+        if rot_changed {
+            field_slice_viewer.rotate_to(setting.viewer_setting.slice_angle);
+            update_flag |= UpdateFlag::UPDATE_SLICE_POS;
+        }
+
+        if color_changed {
+            update_flag |= UpdateFlag::UPDATE_COLOR_MAP;
+        }
+
+        if camera_update {
+            render_sys.camera.position = setting.viewer_setting.camera_pos;
+            set_camera_angle(&mut render_sys.camera, setting.viewer_setting.camera_angle);
+
+            view_projection = render_sys.get_view_projection(&setting.viewer_setting);
+            update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
+        }
+
+        /////
+
+        sound_source_viewer.update(
+            &mut render_sys,
+            view_projection,
+            &setting.viewer_setting,
+            &sources,
+            update_flag,
+        );
+        field_slice_viewer.update(
+            &mut render_sys,
+            view_projection,
+            &setting.viewer_setting,
+            &sources,
+            update_flag,
+        );
+
+        encoder.clear(&render_sys.output_color, [0.3, 0.3, 0.3, 1.0]);
+        encoder.clear_depth(&render_sys.output_stencil, 1.0);
+        sound_source_viewer.renderer(&mut encoder);
+        field_slice_viewer.renderer(&mut encoder);
+
+        platform.prepare_render(&ui, render_sys.window());
+        let draw_data = ui.render();
+        render_sys
+            .renderer
+            .render(
+                &mut render_sys.factory,
+                &mut encoder,
+                &mut render_sys.output_color,
+                draw_data,
+            )
+            .expect("Rendering failed");
+        encoder.flush(&mut render_sys.device);
+        render_sys.swap_buffers();
+        render_sys.device.cleanup();
     }
 
-    autd_server.close();
+    setting.merge_render_sys(&render_sys);
 
-    setting.slice_model = field_view.get_slice_model();
-
-    let current_size = field_window.draw_size();
-    setting.window_width = current_size.width as u32;
-    setting.window_height = current_size.height as u32;
     setting.save("setting.json");
 }
+
+// mod camera_helper;
+// mod color;
+// mod settings;
+// mod ui;
+// mod viewer_controller;
+
+// use std::{f32::consts::PI, sync::mpsc};
+
+// use crate::{settings::Setting, ui::UiView, viewer_controller::ViewController};
+// use acoustic_field_viewer::{
+//     sound_source::SoundSource,
+//     view::{UpdateFlag, ViewWindow},
+// };
+// use autd3_core::hardware_defined::{NUM_TRANS_X, NUM_TRANS_Y, TRANS_SPACING_MM};
+// use autd3_emulator_server::{AUTDData, AUTDServer, Geometry};
+// use piston_window::Window;
+
+// type Vector3 = vecmath::Vector3<f32>;
+// type Matrix4 = vecmath::Matrix4<f32>;
+
+// fn main() {
+//     let mut setting = Setting::load("setting.json");
+
+//     let mut autd_server = AUTDServer::new(&format!("127.0.0.1:{}", setting.port)).unwrap();
+
+//     let mut viewer_setting = setting.to_viewer_settings();
+//     viewer_setting.color_scale = 0.6;
+//     viewer_setting.slice_alpha = 0.95;
+
+//     let (mut field_view, mut field_window) = ViewWindow::new(
+//         setting.slice_model,
+//         &viewer_setting,
+//         [setting.window_width, setting.window_height],
+//     );
+
+//     let (from_ui, to_cnt) = mpsc::channel();
+//     let (from_cnt, to_ui) = mpsc::channel();
+//     let mut viewer_controller = ViewController::new(to_cnt, from_cnt);
+//     let (mut ui_view, mut ui_window) = UiView::new(to_ui, from_ui);
+
+//     let mut sources = Vec::new();
+//     let mut last_amp = Vec::new();
+
+//     let mut is_init = true;
+
+//     while let Some(e_field) = field_window.next() {
+//         // while let (Some(e_field), Some(e_ui)) = (field_window.next(), ui_window.next()) {
+//         let mut update_flag = UpdateFlag::empty();
+//         if is_init {
+//             update_flag |= UpdateFlag::UPDATE_SLICE_POS;
+//             update_flag |= UpdateFlag::UPDATE_COLOR_MAP;
+//             update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
+//             update_flag |= UpdateFlag::UPDATE_WAVENUM;
+//             is_init = false;
+//         }
+
+//         // viewer_controller.update(&mut field_view, &e_field, &mut &mut update_flag);
+//         field_view.renderer(
+//             &mut field_window,
+//             e_field,
+//             &viewer_setting,
+//             &sources,
+//             update_flag,
+//         );
+//         // ui_view.renderer(&mut ui_window, e_ui);
+//     }
+
+//     autd_server.close();
+
+//     setting.slice_model = field_view.get_slice_model();
+
+//     let current_size = field_window.size();
+//     setting.window_width = current_size.width as u32;
+//     setting.window_height = current_size.height as u32;
+//     setting.save("setting.json");
+// }
