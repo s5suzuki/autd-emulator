@@ -19,7 +19,10 @@ use acoustic_field_viewer::{
     view::{AcousticFiledSliceViewer, SoundSourceViewer, System, UpdateFlag},
     Matrix3, Vector3,
 };
-use autd3_emulator_server::{AUTDData, AUTDServer};
+use autd3_core::hardware_defined::{
+    RxGlobalControlFlags, MOD_SAMPLING_FREQ_BASE, POINT_SEQ_BASE_FREQ,
+};
+use autd3_emulator_server::{AUTDData, AUTDServer, DelayOffset, Modulation, Sequence};
 use camera_controllers::Camera;
 use gfx::Device;
 use glutin::{
@@ -55,6 +58,7 @@ fn rot_mat_to_euler_angles(mat: &Matrix3) -> Vector3 {
     }
 }
 
+// TODO: This log system is not so efficient
 fn log(log_buf: &mut VecDeque<String>, msg: &str, setting: &Setting) {
     if setting.log_enable {
         let date = chrono::Local::now();
@@ -64,7 +68,6 @@ fn log(log_buf: &mut VecDeque<String>, msg: &str, setting: &Setting) {
         }
     }
 }
-
 fn get_log_txt(log_buf: &VecDeque<String>) -> String {
     let mut log = String::new();
     for line in log_buf {
@@ -113,6 +116,10 @@ pub fn main() {
     let mut last_frame = Instant::now();
     let mut run = true;
     let mut init = true;
+    let mut ctrl_flag = RxGlobalControlFlags::empty();
+    let mut modulation: Option<Modulation> = None;
+    let mut sequence: Option<Sequence> = None;
+    let mut delay_offset: Option<DelayOffset> = None;
     while run {
         events_loop.run_return(|event, _, control_flow| {
             if init {
@@ -186,6 +193,9 @@ pub fn main() {
                             source.amp = 0.;
                             source.phase = 0.;
                         }
+                        modulation = None;
+                        sequence = None;
+                        delay_offset = None;
                         log(&mut log_buf, "clear", &setting);
                         update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
                     }
@@ -206,7 +216,33 @@ pub fn main() {
                         log(&mut log_buf, "resume", &setting);
                         update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
                     }
-                    _ => (),
+                    AUTDData::Modulation(m) => {
+                        modulation = Some(m);
+                        log(&mut log_buf, "receive modulation", &setting);
+                    }
+                    AUTDData::CtrlFlag(flag) => {
+                        ctrl_flag = flag;
+                    }
+                    AUTDData::RequestFPGAVerMSB => {
+                        log(&mut log_buf, "req fpga ver msb", &setting);
+                    }
+                    AUTDData::RequestFPGAVerLSB => {
+                        log(&mut log_buf, "req fpga ver lsb", &setting);
+                    }
+                    AUTDData::RequestCPUVerMSB => {
+                        log(&mut log_buf, "req cpu ver lsb", &setting);
+                    }
+                    AUTDData::RequestCPUVerLSB => {
+                        log(&mut log_buf, "req cpu ver lsb", &setting);
+                    }
+                    AUTDData::Sequence(seq) => {
+                        sequence = Some(seq);
+                        log(&mut log_buf, "receive sequence", &setting);
+                    }
+                    AUTDData::DelayOffset(d) => {
+                        delay_offset = Some(d);
+                        log(&mut log_buf, "receive delay offset", &setting);
+                    }
                 }
             }
         });
@@ -329,6 +365,115 @@ pub fn main() {
                     .range(0..=1000)
                     .build(&ui, &mut setting.log_max);
                 ui.text(get_log_txt(&log_buf));
+            });
+            TabItem::new(im_str!("Info")).build(&ui, || {
+                ui.text("Control flag");
+                let mut flag = ctrl_flag;
+                ui.checkbox_flags(
+                    im_str!("MOD BEGIN"),
+                    &mut flag,
+                    RxGlobalControlFlags::MOD_BEGIN,
+                );
+                ui.checkbox_flags(im_str!("MOD END"), &mut flag, RxGlobalControlFlags::MOD_END);
+                ui.checkbox_flags(
+                    im_str!("MOD END"),
+                    &mut flag,
+                    RxGlobalControlFlags::READ_FPGA_INFO,
+                );
+                ui.checkbox_flags(im_str!("SILENT"), &mut flag, RxGlobalControlFlags::SILENT);
+                ui.checkbox_flags(
+                    im_str!("FORCE FAN"),
+                    &mut flag,
+                    RxGlobalControlFlags::FORCE_FAN,
+                );
+                ui.checkbox_flags(
+                    im_str!("SEQ MODE"),
+                    &mut flag,
+                    RxGlobalControlFlags::SEQ_MODE,
+                );
+                ui.checkbox_flags(
+                    im_str!("SEQ BEGIN"),
+                    &mut flag,
+                    RxGlobalControlFlags::SEQ_BEGIN,
+                );
+                ui.checkbox_flags(im_str!("SEQ END"), &mut flag, RxGlobalControlFlags::SEQ_END);
+
+                if let Some(m) = &modulation {
+                    ui.separator();
+                    ui.text("Modulation");
+                    ui.text(format!("Modulation size: {}", m.mod_data.len()));
+                    ui.text(format!("Modulation division: {}", m.mod_div));
+                    let smpl_period =
+                        (1000000.0 / MOD_SAMPLING_FREQ_BASE) as usize * m.mod_div as usize;
+                    ui.text(format!("Modulation sampling period: {} [us]", smpl_period));
+                    ui.text(format!(
+                        "Modulation period: {} [us]",
+                        smpl_period * m.mod_data.len()
+                    ));
+                    if !m.mod_data.is_empty() {
+                        ui.text(format!("mod[0]: {}", m.mod_data[0]));
+                    }
+                    if m.mod_data.len() == 2 || m.mod_data.len() == 3 {
+                        ui.text(format!("mod[1]: {}", m.mod_data[1]));
+                    } else if m.mod_data.len() > 3 {
+                        ui.text("...");
+                    }
+                    if m.mod_data.len() >= 3 {
+                        let idx = m.mod_data.len() - 1;
+                        ui.text(format!("mod[{}]: {}", idx, m.mod_data[idx]));
+                    }
+                }
+
+                if ctrl_flag.contains(RxGlobalControlFlags::SEQ_MODE) {
+                    ui.separator();
+                    ui.text("Sequence mode");
+                    if let Some(seq) = &sequence {
+                        ui.text(format!("Sequence size: {}", seq.seq_data.len()));
+                        ui.text(format!("Sequence division: {}", seq.seq_div));
+                        let smpl_period = (1000000 / POINT_SEQ_BASE_FREQ) * seq.seq_div as usize;
+                        ui.text(format!("Sequence sampling period: {} [us]", smpl_period));
+                        ui.text(format!(
+                            "Sequence period: {} [us]",
+                            smpl_period * seq.seq_data.len()
+                        ));
+                        if !seq.seq_data.is_empty() {
+                            ui.text(format!(
+                                "seq[0]: {:?} / {}",
+                                seq.seq_data[0].0, seq.seq_data[0].1
+                            ));
+                        }
+                        if seq.seq_data.len() == 2 || seq.seq_data.len() == 3 {
+                            ui.text(format!(
+                                "seq[1]: {:?} / {}",
+                                seq.seq_data[1].0, seq.seq_data[1].1
+                            ));
+                        } else if seq.seq_data.len() > 3 {
+                            ui.text("...");
+                        }
+                        if seq.seq_data.len() >= 3 {
+                            let idx = seq.seq_data.len() - 1;
+                            ui.text(format!(
+                                "seq[{}]: {:?} / {}",
+                                idx, seq.seq_data[idx].0, seq.seq_data[idx].1
+                            ));
+                        }
+                    }
+                }
+
+                if let Some(d) = &delay_offset {
+                    ui.separator();
+                    ui.text("Duty offset and Delay");
+                    ui.text(format!(
+                        "offset[0]: {}, delay[0]: {}",
+                        d.delay_offset[0].1, d.delay_offset[0].0
+                    ));
+                    ui.text("...");
+                    let idx = d.delay_offset.len() - 1;
+                    ui.text(format!(
+                        "offset[{0}]: {1}, delay[{0}]: {2}",
+                        idx, d.delay_offset[idx].1, d.delay_offset[idx].0
+                    ));
+                }
             });
         });
 

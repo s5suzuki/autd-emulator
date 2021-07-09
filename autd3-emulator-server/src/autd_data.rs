@@ -12,20 +12,72 @@
  */
 
 use acoustic_field_viewer::sound_source::SoundSource;
-use autd3_core::hardware_defined::{NUM_TRANS_X, NUM_TRANS_Y, TRANS_SPACING_MM};
+use autd3_core::hardware_defined::{
+    RxGlobalControlFlags, NUM_TRANS_X, NUM_TRANS_Y, TRANS_SPACING_MM,
+};
 
 use crate::Vector3;
 
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct Modulation {
-    pub(crate) mod_data: Vec<u8>,
+    pub mod_data: Vec<u8>,
+    pub mod_div: u16,
 }
 
 #[derive(Debug)]
 pub struct Gain {
     pub amps: Vec<u8>,
     pub phases: Vec<u8>,
+}
+
+pub(crate) struct SeqFocus {
+    buf: [u16; 4],
+}
+
+impl SeqFocus {
+    pub(crate) fn x(&self, wavelength: u16) -> f32 {
+        let v: u32 = self.buf[0] as u32;
+        let v: u32 = v | (((self.buf[1] as u32) & 0x0001) << 16);
+        let v: u32 = v | (((self.buf[1] as u32) & 0x0002) << 30);
+        unsafe {
+            let v: i32 = *(&v as *const _ as *const i32);
+            v as f32 * wavelength as f32 / 1000. / 256.0
+        }
+    }
+    pub(crate) fn y(&self, wavelength: u16) -> f32 {
+        let v: u32 = (self.buf[1] as u32) >> 2;
+        let v: u32 = v | (((self.buf[2] as u32) & 0x0007) << 14);
+        let v: u32 = v | (((self.buf[2] as u32) & 0x0008) << 28);
+        unsafe {
+            let v: i32 = *(&v as *const _ as *const i32);
+            v as f32 * wavelength as f32 / 1000. / 256.0
+        }
+    }
+
+    pub(crate) fn z(&self, wavelength: u16) -> f32 {
+        let v: u32 = (self.buf[2] as u32) >> 4;
+        let v: u32 = v | (((self.buf[3] as u32) & 0x001F) << 12);
+        let v: u32 = v | (((self.buf[3] as u32) & 0x0020) << 26);
+        unsafe {
+            let v: i32 = *(&v as *const _ as *const i32);
+            v as f32 * wavelength as f32 / 1000. / 256.0
+        }
+    }
+    pub(crate) fn amp(&self) -> u8 {
+        ((self.buf[3] & 0x3FC0) >> 6) as u8
+    }
+}
+
+#[derive(Debug)]
+pub struct Sequence {
+    pub seq_div: u16,
+    pub seq_data: Vec<(Vector3, u8)>,
+}
+
+#[derive(Debug)]
+pub struct DelayOffset {
+    pub delay_offset: Vec<(u8, u8)>,
 }
 
 #[derive(Debug)]
@@ -40,9 +92,16 @@ pub enum AUTDData {
     Modulation(Modulation),
     Gain(Gain),
     Geometries(Vec<Geometry>),
+    CtrlFlag(RxGlobalControlFlags),
     Clear,
     Pause,
     Resume,
+    RequestFPGAVerMSB,
+    RequestFPGAVerLSB,
+    RequestCPUVerMSB,
+    RequestCPUVerLSB,
+    Sequence(Sequence),
+    DelayOffset(DelayOffset),
 }
 
 impl Geometry {
