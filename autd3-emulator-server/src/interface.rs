@@ -4,17 +4,18 @@
  * Created Date: 29/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 30/04/2020
+ * Last Modified: 08/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
  *
  */
 
-use std::net::UdpSocket;
-use std::sync::mpsc::Sender;
-use std::sync::{Arc, RwLock};
-use std::{thread, thread::JoinHandle};
+use std::{
+    net::UdpSocket,
+    sync::{mpsc::Sender, Arc, RwLock},
+    thread::{self, JoinHandle},
+};
 
 const BUF_SIZE: usize = 65536;
 
@@ -50,7 +51,7 @@ impl Interface {
             is_open: Arc::new(RwLock::new(false)),
             socket,
             th_handle: None,
-            addr: addr.to_string(),
+            addr: addr.to_owned(),
         })
     }
 
@@ -78,7 +79,7 @@ impl Interface {
         if_not_open_or_cannot_read!(self.is_open, return);
         write_rwlock!(self.is_open, false);
 
-        let socket = UdpSocket::bind("127.0.0.1:50623").unwrap();
+        let socket = UdpSocket::bind("127.0.0.1:8080").unwrap();
         socket.send_to(&[0x00], &self.addr).unwrap();
 
         if let Some(handle) = self.th_handle.take() {

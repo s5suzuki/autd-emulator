@@ -81,7 +81,7 @@ pub fn mat4_rot(rot: Quaterion) -> Matrix4 {
     let w = rot.0;
     [
         [
-            1. - 2. * y * y,
+            1. - 2. * y * y - 2. * z * z,
             2. * x * y + 2. * w * z,
             2. * x * z - 2. * w * y,
             0.,

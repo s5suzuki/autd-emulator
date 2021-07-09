@@ -1,6 +1,6 @@
 [package]
 name = "autd-emulator"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["shun suzuki <suzuki@hapis.k.u-tokyo.ac.jp>"]
 edition = "2018"
 
@@ -8,16 +8,24 @@ edition = "2018"
 
 [dependencies]
 acoustic_field_viewer = {path="../acoustic_field_viewer"}
-conrod = "0.62.1"
-conrod_core = "0.74.0"
-conrod_piston = "0.74.0"
+autd3-core = "1.5.0"
+autd3_emulator_server = {path="../autd3-emulator-server"}
 camera_controllers = "0.32.0"
+chrono = "0.4.19"
 find_folder = "0.3.0"
-piston_window = "0.120.0"
+gfx = "0.18.2"
+gfx_core = "0.9.2"
+gfx_device_gl = "0.16.2"
+glutin = "0.26.0"
+image = "0.23.14"
+imgui = "0.7.0"
+imgui-gfx-renderer = "0.7.0"
+imgui-winit-support = "0.7.1"
+old_school_gfx_glutin_ext = "0.26"
 quaternion = "0.4.1"
 scarlet = "1.1.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+shader_version = "0.7.0"
 vecmath = "1.0.0"
 vecmath_util = {path="../vecmath_util"}
-autd3-core = "1.5.0"
