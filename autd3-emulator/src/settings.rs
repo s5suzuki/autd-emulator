@@ -47,7 +47,8 @@ impl Setting {
     }
 
     pub fn merge_render_sys(&mut self, render_sys: &RenderSystem) {
-        let size = render_sys.window().inner_size();
+        let scale_factor = render_sys.window().scale_factor();
+        let size = render_sys.window().inner_size().to_logical(scale_factor);
         self.window_width = size.width;
         self.window_height = size.height;
     }
