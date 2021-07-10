@@ -20,7 +20,7 @@ use gfx::{
     format,
     handle::{Buffer, DepthStencilView, RenderTargetView, ShaderResourceView},
     preset::depth,
-    state::{Blend, ColorMask},
+    state::ColorMask,
     texture::{FilterMethod, SamplerInfo, WrapMode},
     traits::*,
     BlendTarget, DepthTarget, Global, PipelineState, Slice, TextureSampler, VertexBuffer,
@@ -51,27 +51,19 @@ impl Vertex {
     }
 }
 
-fn alpha_blender() -> Blend {
-    use gfx::state::{BlendValue, Equation, Factor};
-    Blend::new(
-        Equation::Add,
-        Factor::ZeroPlus(BlendValue::SourceAlpha),
-        Factor::OneMinus(BlendValue::SourceAlpha),
-    )
-}
-
 gfx_pipeline!( pipe {
     vertex_buffer: VertexBuffer<Vertex> = (),
     u_model_view_proj: Global<[[f32; 4]; 4]> = "u_model_view_proj",
     t_color: TextureSampler<[f32; 4]> = "t_color",
     i_color: Global<[f32; 4]> = "i_Color",
-    out_color: BlendTarget<format::Srgba8> = ("o_Color", ColorMask::all(), alpha_blender()),
+    out_color: BlendTarget<format::Srgba8> = ("o_Color", ColorMask::all(), gfx::preset::blend::ALPHA),
     out_depth: DepthTarget<format::DepthStencil> = depth::LESS_EQUAL_WRITE,
 });
 
 pub struct SoundSourceViewer {
     pipe_data_list: Vec<pipe::Data<Resources>>,
-    pso_slice: (PipelineState<Resources, pipe::Meta>, Slice<Resources>),
+    pso: PipelineState<Resources, pipe::Meta>,
+    slice: Slice<Resources>,
     models: Vec<Matrix4>,
     vertex_buffer: Buffer<Resources, Vertex>,
     view: ShaderResourceView<Resources, [f32; 4]>,
@@ -93,7 +85,7 @@ impl SoundSourceViewer {
             factory.create_vertex_buffer_with_slice(&vertex_data, index_data);
 
         let glsl = opengl.to_glsl();
-        let pso_slice = Self::initialize_shader(&mut factory, glsl, slice);
+        let pso = Self::initialize_shader(&mut factory, glsl);
 
         let assets = find_folder::Search::ParentsThenKids(3, 3)
             .for_folder("assets")
@@ -101,11 +93,10 @@ impl SoundSourceViewer {
         let view =
             create_texture_resource(assets.join("textures/circle.png"), &mut factory).unwrap();
 
-        let vertex_buffer = vertex_buffer;
-
         SoundSourceViewer {
             pipe_data_list: vec![],
-            pso_slice,
+            pso,
+            slice,
             models: vec![],
             vertex_buffer,
             view,
@@ -194,11 +185,7 @@ impl SoundSourceViewer {
         encoder: &mut gfx::Encoder<render_system::types::Resources, CommandBuffer>,
     ) {
         for i in 0..self.pipe_data_list.len() {
-            encoder.draw(
-                &self.pso_slice.1,
-                &self.pso_slice.0,
-                &self.pipe_data_list[i],
-            );
+            encoder.draw(&self.slice, &self.pso, &self.pipe_data_list[i]);
         }
     }
 
@@ -227,31 +214,27 @@ impl SoundSourceViewer {
     fn initialize_shader(
         factory: &mut gfx_device_gl::Factory,
         version: GLSL,
-        slice: Slice<Resources>,
-    ) -> (PipelineState<Resources, pipe::Meta>, Slice<Resources>) {
-        (
-            factory
-                .create_pipeline_simple(
-                    Shaders::new()
-                        .set(
-                            GLSL::V4_50,
-                            include_str!("../../../assets/shaders/circle.vert"),
-                        )
-                        .get(version)
-                        .unwrap()
-                        .as_bytes(),
-                    Shaders::new()
-                        .set(
-                            GLSL::V4_50,
-                            include_str!("../../../assets/shaders/circle.frag"),
-                        )
-                        .get(version)
-                        .unwrap()
-                        .as_bytes(),
-                    pipe::new(),
-                )
-                .unwrap(),
-            slice,
-        )
+    ) -> PipelineState<Resources, pipe::Meta> {
+        factory
+            .create_pipeline_simple(
+                Shaders::new()
+                    .set(
+                        GLSL::V4_50,
+                        include_str!("../../../assets/shaders/circle.vert"),
+                    )
+                    .get(version)
+                    .unwrap()
+                    .as_bytes(),
+                Shaders::new()
+                    .set(
+                        GLSL::V4_50,
+                        include_str!("../../../assets/shaders/circle.frag"),
+                    )
+                    .get(version)
+                    .unwrap()
+                    .as_bytes(),
+                pipe::new(),
+            )
+            .unwrap()
     }
 }
