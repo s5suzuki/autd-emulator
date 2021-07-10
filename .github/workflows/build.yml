@@ -17,12 +17,13 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+    - uses: seanmiddleditch/gha-setup-ninja@master
     - name: Checkout submodules
       run: git submodule update --init --force --recursive
     - name: Build
-      run: cargo build --workspace --verbose
+      run: cargo build --workspace --verbose --all-features
     - name: Run tests
-      run: cargo test --workspace
+      run: cargo test --workspace --all-features
 
   lint:
     runs-on: ubuntu-latest

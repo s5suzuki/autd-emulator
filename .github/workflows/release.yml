@@ -45,11 +45,10 @@ jobs:
             return 'autd3-emulator'+context.payload.ref.replace(/refs\/tags\//, '')+'-win';
       - name: Checkout submodules
         run: git submodule update --init --force --recursive
-      - name: setup-msbuild
-        uses: microsoft/setup-msbuild@v1
+      - uses: seanmiddleditch/gha-setup-ninja@master
       - name: Build project x64
         run: |
-          cargo build --release
+          cargo build --release --all-features
           Compress-Archive -Path LICENSE, README.md, assets, target/release/autd-emulator.exe -DestinationPath assets_x64.zip
       - name: Load Release URL File from release job
         uses: actions/download-artifact@v1
