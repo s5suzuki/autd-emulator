@@ -127,39 +127,17 @@ impl SoundSourceViewer {
         sources: &[SoundSource],
         update_flag: UpdateFlag,
     ) {
-        if update_flag.contains(UpdateFlag::UPDATE_SOURCE_DRIVE) {
-            if self.pipe_data_list.len() != sources.len() {
-                let factory = &mut render_sys.factory;
-                self.pipe_data_list = Self::initialize_pipe_data(
-                    factory,
-                    self.vertex_buffer.clone(),
-                    self.view.clone(),
-                    render_sys.output_color.clone(),
-                    render_sys.output_stencil.clone(),
-                    sources,
-                );
-            }
-
-            for (i, source) in sources.iter().enumerate() {
-                self.pipe_data_list[i].i_color = (self.coloring_method)(
-                    source.phase / (2.0 * PI),
-                    source.amp,
-                    settings.source_alpha,
-                );
-            }
-        }
-
-        if update_flag.contains(UpdateFlag::UPDATE_SOURCE_ALPHA) {
-            for pipe_data in self.pipe_data_list.iter_mut() {
-                pipe_data.i_color[3] = settings.source_alpha;
-            }
-        }
-
-        if update_flag.contains(UpdateFlag::UPDATE_SOURCE_POS) {
-            if self.models.len() != sources.len() {
-                self.init_model(settings, sources);
-            }
-
+        if update_flag.contains(UpdateFlag::INIT_SOURCE) {
+            let factory = &mut render_sys.factory;
+            self.pipe_data_list = Self::initialize_pipe_data(
+                factory,
+                self.vertex_buffer.clone(),
+                self.view.clone(),
+                render_sys.output_color.clone(),
+                render_sys.output_stencil.clone(),
+                sources,
+            );
+            self.init_model(settings, sources);
             for (i, source) in sources.iter().enumerate() {
                 self.models[i][3][0] = source.pos[0];
                 self.models[i][3][1] = source.pos[1];
@@ -172,10 +150,28 @@ impl SoundSourceViewer {
                 self.pipe_data_list[i].u_model_view_proj =
                     model_view_projection(self.models[i], view_projection.0, view_projection.1);
             }
-        } else if update_flag.contains(UpdateFlag::UPDATE_CAMERA_POS) {
+        }
+
+        if update_flag.contains(UpdateFlag::UPDATE_CAMERA_POS) {
             for i in 0..self.pipe_data_list.len() {
                 self.pipe_data_list[i].u_model_view_proj =
                     model_view_projection(self.models[i], view_projection.0, view_projection.1);
+            }
+        }
+
+        if update_flag.contains(UpdateFlag::UPDATE_SOURCE_DRIVE) {
+            for (i, source) in sources.iter().enumerate() {
+                self.pipe_data_list[i].i_color = (self.coloring_method)(
+                    source.phase / (2.0 * PI),
+                    source.amp,
+                    settings.source_alpha,
+                );
+            }
+        }
+
+        if update_flag.contains(UpdateFlag::UPDATE_SOURCE_ALPHA) {
+            for pipe_data in self.pipe_data_list.iter_mut() {
+                pipe_data.i_color[3] = settings.source_alpha;
             }
         }
     }

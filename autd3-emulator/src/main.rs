@@ -181,7 +181,7 @@ impl App {
                             }
                         }
                         self.log("geometry");
-                        update_flag |= UpdateFlag::UPDATE_SOURCE_POS;
+                        update_flag |= UpdateFlag::INIT_SOURCE;
                         update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
                     }
                     AutdData::Gain(gain) => {
@@ -715,6 +715,7 @@ impl App {
                     ..Default::default()
                 };
                 self.setting.viewer_setting = default_setting;
+                self.reset(render_sys);
                 update_flag = UpdateFlag::all();
             }
         });
