@@ -28,7 +28,7 @@ use acoustic_field_viewer::{
 use autd3_core::hardware_defined::{
     RxGlobalControlFlags, MOD_SAMPLING_FREQ_BASE, POINT_SEQ_BASE_FREQ,
 };
-use autd3_emulator_server::{AUTDData, AUTDServer, DelayOffset, Modulation, Sequence};
+use autd3_emulator_server::{AutdData, AutdServer, DelayOffset, Modulation, Sequence};
 use gfx::Device;
 use glutin::{
     event::{Event, WindowEvent},
@@ -90,7 +90,7 @@ impl App {
             ..
         } = system;
 
-        let mut autd_server = AUTDServer::new(&format!("127.0.0.1:{}", self.setting.port)).unwrap();
+        let mut autd_server = AutdServer::new(&format!("127.0.0.1:{}", self.setting.port)).unwrap();
 
         self.reset(&mut render_sys);
 
@@ -168,12 +168,12 @@ impl App {
         self.view_projection = render_sys.get_view_projection(&self.setting.viewer_setting);
     }
 
-    fn handle_autd(&mut self, autd_server: &mut AUTDServer) -> UpdateFlag {
+    fn handle_autd(&mut self, autd_server: &mut AutdServer) -> UpdateFlag {
         let mut update_flag = UpdateFlag::empty();
         autd_server.update(|data| {
             for d in data {
                 match d {
-                    AUTDData::Geometries(geometries) => {
+                    AutdData::Geometries(geometries) => {
                         self.sources.clear();
                         for geometry in geometries {
                             for trans in geometry.make_autd_transducers() {
@@ -184,7 +184,7 @@ impl App {
                         update_flag |= UpdateFlag::UPDATE_SOURCE_POS;
                         update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
                     }
-                    AUTDData::Gain(gain) => {
+                    AutdData::Gain(gain) => {
                         for ((&phase, &amp), source) in gain
                             .phases
                             .iter()
@@ -197,7 +197,7 @@ impl App {
                         self.log("gain");
                         update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
                     }
-                    AUTDData::Clear => {
+                    AutdData::Clear => {
                         for source in self.sources.iter_mut() {
                             source.amp = 0.;
                             source.phase = 0.;
@@ -208,7 +208,7 @@ impl App {
                         self.log("clear");
                         update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
                     }
-                    AUTDData::Pause => {
+                    AutdData::Pause => {
                         self.last_amp.clear();
                         for source in self.sources.iter_mut() {
                             self.last_amp.push(source.amp);
@@ -217,7 +217,7 @@ impl App {
                         self.log("pause");
                         update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
                     }
-                    AUTDData::Resume => {
+                    AutdData::Resume => {
                         for (source, &amp) in self.sources.iter_mut().zip(self.last_amp.iter()) {
                             source.amp = amp;
                         }
@@ -225,30 +225,30 @@ impl App {
                         self.log("resume");
                         update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
                     }
-                    AUTDData::Modulation(m) => {
+                    AutdData::Modulation(m) => {
                         self.modulation = Some(m);
                         self.log("receive modulation");
                     }
-                    AUTDData::CtrlFlag(flag) => {
+                    AutdData::CtrlFlag(flag) => {
                         self.ctrl_flag = flag;
                     }
-                    AUTDData::RequestFPGAVerMSB => {
+                    AutdData::RequestFpgaVerMsb => {
                         self.log("req fpga ver msb");
                     }
-                    AUTDData::RequestFPGAVerLSB => {
+                    AutdData::RequestFpgaVerLsb => {
                         self.log("req fpga ver lsb");
                     }
-                    AUTDData::RequestCPUVerMSB => {
+                    AutdData::RequestCpuVerMsb => {
                         self.log("req cpu ver lsb");
                     }
-                    AUTDData::RequestCPUVerLSB => {
+                    AutdData::RequestCpuVerLsb => {
                         self.log("req cpu ver lsb");
                     }
-                    AUTDData::Sequence(seq) => {
+                    AutdData::Sequence(seq) => {
                         self.sequence = Some(seq);
                         self.log("receive sequence");
                     }
-                    AUTDData::DelayOffset(d) => {
+                    AutdData::DelayOffset(d) => {
                         self.delay_offset = Some(d);
                         self.log("receive delay offset");
                     }
