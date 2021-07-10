@@ -14,7 +14,7 @@ const float PI = 3.141592653589793;
 
 vec4 coloring(float t)
 {
-  return texture(u_color_map, clamp(t * u_color_scale, 0.0, 1.0));
+  return texture(u_color_map, clamp(t, 0.0, 1.0));
 }
 
 void main() {
@@ -30,5 +30,5 @@ void main() {
         re += amp * sin(p - u_wavenum*d) / d;
     }
     float c = sqrt(re*re+im*im);
-    o_Color = coloring(c);
+    o_Color = coloring(c/u_color_scale);
 }

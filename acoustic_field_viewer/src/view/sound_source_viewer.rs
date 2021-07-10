@@ -20,7 +20,7 @@ use gfx::{
     format,
     handle::{Buffer, DepthStencilView, RenderTargetView, ShaderResourceView},
     preset::depth,
-    state::{Blend, ColorMask},
+    state::ColorMask,
     texture::{FilterMethod, SamplerInfo, WrapMode},
     traits::*,
     BlendTarget, DepthTarget, Global, PipelineState, Slice, TextureSampler, VertexBuffer,
@@ -51,27 +51,19 @@ impl Vertex {
     }
 }
 
-fn alpha_blender() -> Blend {
-    use gfx::state::{BlendValue, Equation, Factor};
-    Blend::new(
-        Equation::Add,
-        Factor::ZeroPlus(BlendValue::SourceAlpha),
-        Factor::OneMinus(BlendValue::SourceAlpha),
-    )
-}
-
 gfx_pipeline!( pipe {
     vertex_buffer: VertexBuffer<Vertex> = (),
     u_model_view_proj: Global<[[f32; 4]; 4]> = "u_model_view_proj",
     t_color: TextureSampler<[f32; 4]> = "t_color",
     i_color: Global<[f32; 4]> = "i_Color",
-    out_color: BlendTarget<format::Srgba8> = ("o_Color", ColorMask::all(), alpha_blender()),
+    out_color: BlendTarget<format::Srgba8> = ("o_Color", ColorMask::all(), gfx::preset::blend::ALPHA),
     out_depth: DepthTarget<format::DepthStencil> = depth::LESS_EQUAL_WRITE,
 });
 
 pub struct SoundSourceViewer {
     pipe_data_list: Vec<pipe::Data<Resources>>,
-    pso_slice: (PipelineState<Resources, pipe::Meta>, Slice<Resources>),
+    pso: PipelineState<Resources, pipe::Meta>,
+    slice: Slice<Resources>,
     models: Vec<Matrix4>,
     vertex_buffer: Buffer<Resources, Vertex>,
     view: ShaderResourceView<Resources, [f32; 4]>,
@@ -93,7 +85,7 @@ impl SoundSourceViewer {
             factory.create_vertex_buffer_with_slice(&vertex_data, index_data);
 
         let glsl = opengl.to_glsl();
-        let pso_slice = Self::initialize_shader(&mut factory, glsl, slice);
+        let pso = Self::initialize_shader(&mut factory, glsl);
 
         let assets = find_folder::Search::ParentsThenKids(3, 3)
             .for_folder("assets")
@@ -101,11 +93,10 @@ impl SoundSourceViewer {
         let view =
             create_texture_resource(assets.join("textures/circle.png"), &mut factory).unwrap();
 
-        let vertex_buffer = vertex_buffer;
-
         SoundSourceViewer {
             pipe_data_list: vec![],
-            pso_slice,
+            pso,
+            slice,
             models: vec![],
             vertex_buffer,
             view,
@@ -127,39 +118,17 @@ impl SoundSourceViewer {
         sources: &[SoundSource],
         update_flag: UpdateFlag,
     ) {
-        if update_flag.contains(UpdateFlag::UPDATE_SOURCE_DRIVE) {
-            if self.pipe_data_list.len() != sources.len() {
-                let factory = &mut render_sys.factory;
-                self.pipe_data_list = Self::initialize_pipe_data(
-                    factory,
-                    self.vertex_buffer.clone(),
-                    self.view.clone(),
-                    render_sys.output_color.clone(),
-                    render_sys.output_stencil.clone(),
-                    sources,
-                );
-            }
-
-            for (i, source) in sources.iter().enumerate() {
-                self.pipe_data_list[i].i_color = (self.coloring_method)(
-                    source.phase / (2.0 * PI),
-                    source.amp,
-                    settings.source_alpha,
-                );
-            }
-        }
-
-        if update_flag.contains(UpdateFlag::UPDATE_SOURCE_ALPHA) {
-            for pipe_data in self.pipe_data_list.iter_mut() {
-                pipe_data.i_color[3] = settings.source_alpha;
-            }
-        }
-
-        if update_flag.contains(UpdateFlag::UPDATE_SOURCE_POS) {
-            if self.models.len() != sources.len() {
-                self.init_model(settings, sources);
-            }
-
+        if update_flag.contains(UpdateFlag::INIT_SOURCE) {
+            let factory = &mut render_sys.factory;
+            self.pipe_data_list = Self::initialize_pipe_data(
+                factory,
+                self.vertex_buffer.clone(),
+                self.view.clone(),
+                render_sys.output_color.clone(),
+                render_sys.output_stencil.clone(),
+                sources,
+            );
+            self.init_model(settings, sources);
             for (i, source) in sources.iter().enumerate() {
                 self.models[i][3][0] = source.pos[0];
                 self.models[i][3][1] = source.pos[1];
@@ -172,10 +141,28 @@ impl SoundSourceViewer {
                 self.pipe_data_list[i].u_model_view_proj =
                     model_view_projection(self.models[i], view_projection.0, view_projection.1);
             }
-        } else if update_flag.contains(UpdateFlag::UPDATE_CAMERA_POS) {
+        }
+
+        if update_flag.contains(UpdateFlag::UPDATE_CAMERA_POS) {
             for i in 0..self.pipe_data_list.len() {
                 self.pipe_data_list[i].u_model_view_proj =
                     model_view_projection(self.models[i], view_projection.0, view_projection.1);
+            }
+        }
+
+        if update_flag.contains(UpdateFlag::UPDATE_SOURCE_DRIVE) {
+            for (i, source) in sources.iter().enumerate() {
+                self.pipe_data_list[i].i_color = (self.coloring_method)(
+                    source.phase / (2.0 * PI),
+                    source.amp,
+                    settings.source_alpha,
+                );
+            }
+        }
+
+        if update_flag.contains(UpdateFlag::UPDATE_SOURCE_ALPHA) {
+            for pipe_data in self.pipe_data_list.iter_mut() {
+                pipe_data.i_color[3] = settings.source_alpha;
             }
         }
     }
@@ -198,11 +185,7 @@ impl SoundSourceViewer {
         encoder: &mut gfx::Encoder<render_system::types::Resources, CommandBuffer>,
     ) {
         for i in 0..self.pipe_data_list.len() {
-            encoder.draw(
-                &self.pso_slice.1,
-                &self.pso_slice.0,
-                &self.pipe_data_list[i],
-            );
+            encoder.draw(&self.slice, &self.pso, &self.pipe_data_list[i]);
         }
     }
 
@@ -231,31 +214,27 @@ impl SoundSourceViewer {
     fn initialize_shader(
         factory: &mut gfx_device_gl::Factory,
         version: GLSL,
-        slice: Slice<Resources>,
-    ) -> (PipelineState<Resources, pipe::Meta>, Slice<Resources>) {
-        (
-            factory
-                .create_pipeline_simple(
-                    Shaders::new()
-                        .set(
-                            GLSL::V4_50,
-                            include_str!("../../../assets/shaders/circle.vert"),
-                        )
-                        .get(version)
-                        .unwrap()
-                        .as_bytes(),
-                    Shaders::new()
-                        .set(
-                            GLSL::V4_50,
-                            include_str!("../../../assets/shaders/circle.frag"),
-                        )
-                        .get(version)
-                        .unwrap()
-                        .as_bytes(),
-                    pipe::new(),
-                )
-                .unwrap(),
-            slice,
-        )
+    ) -> PipelineState<Resources, pipe::Meta> {
+        factory
+            .create_pipeline_simple(
+                Shaders::new()
+                    .set(
+                        GLSL::V4_50,
+                        include_str!("../../../assets/shaders/circle.vert"),
+                    )
+                    .get(version)
+                    .unwrap()
+                    .as_bytes(),
+                Shaders::new()
+                    .set(
+                        GLSL::V4_50,
+                        include_str!("../../../assets/shaders/circle.frag"),
+                    )
+                    .get(version)
+                    .unwrap()
+                    .as_bytes(),
+                pipe::new(),
+            )
+            .unwrap()
     }
 }

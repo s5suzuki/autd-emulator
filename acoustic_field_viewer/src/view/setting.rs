@@ -47,7 +47,7 @@ impl Default for ViewerSettings {
         ViewerSettings {
             frequency: autd3_core::hardware_defined::ULTRASOUND_FREQUENCY as _,
             source_size: autd3_core::hardware_defined::TRANS_SPACING_MM as _,
-            color_scale: 0.6,
+            color_scale: 2.0,
             slice_alpha: 0.95,
             wave_length: 8.5,
             slice_width: 400,
