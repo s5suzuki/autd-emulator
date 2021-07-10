@@ -11,10 +11,7 @@
  *
  */
 
-use acoustic_field_viewer::{
-    view::{render_system::RenderSystem, ViewerSettings},
-    Vector4,
-};
+use acoustic_field_viewer::view::{render_system::RenderSystem, ViewerSettings};
 use serde::{Deserialize, Serialize};
 use std::{
     fs::{File, OpenOptions},
@@ -27,7 +24,6 @@ pub struct Setting {
     pub port: u16,
     pub window_width: u32,
     pub window_height: u32,
-    pub background: Vector4,
     pub viewer_setting: ViewerSettings,
     pub log_enable: bool,
     pub log_max: u32,
@@ -45,7 +41,6 @@ impl Setting {
             port: 50632,
             window_width: 960,
             window_height: 640,
-            background: [0.3, 0.3, 0.3, 1.0],
             viewer_setting: ViewerSettings::new(),
             log_enable: true,
             log_max: 100,

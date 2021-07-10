@@ -151,7 +151,10 @@ impl App {
                 }
             }
 
-            encoder.clear(&render_sys.output_color, self.setting.background);
+            encoder.clear(
+                &render_sys.output_color,
+                self.setting.viewer_setting.background,
+            );
             encoder.clear_depth(&render_sys.output_stencil, 1.0);
             self.sound_source_viewer.renderer(&mut encoder);
             self.field_slice_viewer.renderer(&mut encoder);
@@ -582,9 +585,12 @@ impl App {
                         update_flag |= UpdateFlag::UPDATE_SOURCE_ALPHA;
                     }
                     ui.separator();
-                    ColorPicker::new(im_str!("Background"), &mut self.setting.background)
-                        .alpha(true)
-                        .build(&ui);
+                    ColorPicker::new(
+                        im_str!("Background"),
+                        &mut self.setting.viewer_setting.background,
+                    )
+                    .alpha(true)
+                    .build(&ui);
                 });
                 TabItem::new(im_str!("Info")).build(&ui, || {
                     ui.text("Control flag");

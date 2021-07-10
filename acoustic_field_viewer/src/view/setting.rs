@@ -34,6 +34,7 @@ pub struct ViewerSettings {
     pub fov: f32,
     pub near_clip: f32,
     pub far_clip: f32,
+    pub background: Vector4,
 }
 
 impl ViewerSettings {
@@ -65,6 +66,7 @@ impl Default for ViewerSettings {
             fov: 60. * PI / 180.0,
             near_clip: 0.1,
             far_clip: 1000.,
+            background: [0.3, 0.3, 0.3, 0.0],
         }
     }
 }
