@@ -25,10 +25,7 @@ use gfx::{
 };
 use gfx_device_gl::{CommandBuffer, Resources};
 use glutin::event::{Event, WindowEvent};
-use scarlet::{
-    color::RGBColor,
-    colormap::{ColorMap, ListedColorMap},
-};
+use scarlet::{color::RGBColor, colormap::ColorMap};
 use shader_version::{glsl::GLSL, OpenGL, Shaders};
 
 use crate::{
@@ -77,7 +74,7 @@ pub struct AcousticFiledSliceViewer {
     model: Matrix4,
     pso: PipelineState<Resources, pipe::Meta>,
     slice: Slice<Resources>,
-    field_color_map: ListedColorMap,
+    color_map: Vec<RGBColor>,
 }
 
 impl AcousticFiledSliceViewer {
@@ -94,6 +91,7 @@ impl AcousticFiledSliceViewer {
 
         let (vertex_buffer, slice) = Self::initialize_vertex_buf_and_slice(factory, settings);
 
+        let iter = (0..100).map(|x| x as f64 / 100.0);
         AcousticFiledSliceViewer {
             pipe_data: Self::initialize_pipe_data(
                 factory,
@@ -105,21 +103,8 @@ impl AcousticFiledSliceViewer {
             model: vecmath_util::mat4_scale(1.0),
             pso: Self::initialize_shader(factory, glsl),
             slice,
-            field_color_map: scarlet::colormap::ListedColorMap::inferno(),
+            color_map: scarlet::colormap::ListedColorMap::inferno().transform(iter),
         }
-    }
-
-    pub fn translate(&mut self, travel: Vector3) {
-        self.model[3][0] += travel[0];
-        self.model[3][1] += travel[1];
-        self.model[3][2] += travel[2];
-    }
-
-    pub fn set_posture(&mut self, right: Vector3, up: Vector3) {
-        let forward = vecmath::vec3_cross(right, up);
-        self.model[0] = vecmath_util::to_vec4(right);
-        self.model[1] = vecmath_util::to_vec4(up);
-        self.model[2] = vecmath_util::to_vec4(forward);
     }
 
     pub fn move_to(&mut self, pos: Vector4) {
@@ -137,20 +122,8 @@ impl AcousticFiledSliceViewer {
         self.model
     }
 
-    pub fn position(&self) -> Vector3 {
-        vecmath_util::to_vec3(&self.model[3])
-    }
-
-    pub fn right(&self) -> Vector3 {
-        vecmath::vec3_normalized(vecmath_util::to_vec3(&self.model[0]))
-    }
-
-    pub fn up(&self) -> Vector3 {
-        vecmath::vec3_normalized(vecmath_util::to_vec3(&self.model[1]))
-    }
-
-    pub fn forward(&self) -> Vector3 {
-        vecmath::vec3_normalized(vecmath_util::to_vec3(&self.model[2]))
+    pub fn color_map(&self) -> &[RGBColor] {
+        &self.color_map
     }
 
     pub fn update(
@@ -186,13 +159,10 @@ impl AcousticFiledSliceViewer {
         }
 
         if update_flag.contains(UpdateFlag::UPDATE_COLOR_MAP) {
-            let iter = (0..100).map(|x| x as f64 / 100.0);
-            let colors = self.field_color_map.transform(iter);
             let alpha = settings.slice_alpha;
-            AcousticFiledSliceViewer::update_color_map_texture(
-                &mut self.pipe_data,
+            self.pipe_data.u_color_map = AcousticFiledSliceViewer::update_color_map_texture(
                 &mut renderer_sys.factory,
-                &colors,
+                self.color_map(),
                 alpha,
             );
             self.pipe_data.u_color_scale = settings.color_scale;
@@ -285,10 +255,12 @@ impl AcousticFiledSliceViewer {
     }
 
     fn update_color_map_texture(
-        data: &mut pipe::Data<gfx_device_gl::Resources>,
         factory: &mut gfx_device_gl::Factory,
         colors: &[RGBColor],
         alpha: f32,
+    ) -> (
+        ShaderResourceView<Resources, [f32; 4]>,
+        gfx::handle::Sampler<Resources>,
     ) {
         let sampler_info = SamplerInfo::new(FilterMethod::Scale, WrapMode::Tile);
         let mut texels = Vec::with_capacity(colors.len());
@@ -307,7 +279,7 @@ impl AcousticFiledSliceViewer {
                 &[&texels],
             )
             .unwrap();
-        data.u_color_map = (texture_view, factory.create_sampler(sampler_info));
+        (texture_view, factory.create_sampler(sampler_info))
     }
 
     fn initialize_vertex_buf_and_slice(

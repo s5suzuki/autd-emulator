@@ -1,0 +1,63 @@
+/*
+ * File: cpressure_base.comp
+ * Project: shaders
+ * Created Date: 10/07/2021
+ * Author: Shun Suzuki
+ * -----
+ * Last Modified: 10/07/2021
+ * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
+ * -----
+ * Copyright (c) 2021 Hapis Lab. All rights reserved.
+ * 
+ */
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+layout(set = 0, binding = 0) buffer Result {
+    float data[];
+} result;
+layout(set = 1, binding = 0)  buffer Config{
+    uint source_num;
+    uint num_x;
+    uint num_y;
+    uint num_z;
+    float wave_num;
+    float color_scale;
+    float dummy_0;
+    float dummy_1;
+} config;
+layout(set = 2, binding = 0) buffer SourcePos {
+    vec4 pos[];
+} source_pos;
+layout(set = 3, binding = 0) buffer SourcePhase {
+    float phase[];
+} source_phase;
+layout(set = 3, binding = 1) buffer SourceAmp {
+    float amp[];
+} source_amp;
+layout(set = 4, binding = 0) buffer Points {
+    vec4 pos[];
+} points;
+
+const float PI = 3.1415926535897932384626433832795;
+
+#define MAIN_FROM_COMPLEX_VALUE(expr) \
+void main() { \
+    uint ix = gl_GlobalInvocationID.x; \
+    uint iy = gl_GlobalInvocationID.y; \
+    uint oi = ix + iy * config.num_x; \
+    if (oi >= config.num_x * config.num_y) return; \
+    float re = 0.0;  \
+    float im = 0.0;  \
+    vec3 point = vec3(points.pos[oi]); \
+    for(uint idx = 0; idx < 65536; idx++){ \
+        if (idx >= config.source_num) break; \
+        vec3 tp = vec3(source_pos.pos[idx]); \
+        vec3 rv = point - tp; \
+        float r = length(rv); \
+        float p = source_phase.phase[idx] - config.wave_num * r; \
+        float amp = source_amp.amp[idx] / r; \
+        re += amp * cos(p); \
+        im += amp * sin(p); \
+    } \
+    expr \
+}

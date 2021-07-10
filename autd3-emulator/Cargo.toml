@@ -1,6 +1,6 @@
 [package]
 name = "autd-emulator"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["shun suzuki <suzuki@hapis.k.u-tokyo.ac.jp>"]
 edition = "2018"
 
@@ -29,3 +29,9 @@ serde_json = "1.0"
 shader_version = "0.7.0"
 vecmath = "1.0.0"
 vecmath_util = {path="../vecmath_util"}
+offscreen-renderer = {path="../offscreen_renderer", optional=true}
+
+[features]
+offscreen_renderer = ["offscreen-renderer"]
+all = ["offscreen_renderer"]
+default = []

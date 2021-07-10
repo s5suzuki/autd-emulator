@@ -22,7 +22,7 @@ use std::{
     path::Path,
 };
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Setting {
     pub port: u16,
     pub window_width: u32,
@@ -34,6 +34,9 @@ pub struct Setting {
     pub show_mod_plot: bool,
     pub show_mod_plot_raw: bool,
     pub mod_plot_size: [f32; 2],
+    pub save_file_enable: bool,
+    pub save_file_path: String,
+    pub record_path: String,
 }
 
 impl Setting {
@@ -49,6 +52,19 @@ impl Setting {
             show_mod_plot: true,
             show_mod_plot_raw: false,
             mod_plot_size: [200.0, 50.],
+            save_file_enable: false,
+            save_file_path: std::env::current_dir()
+                .unwrap_or_default()
+                .join("image.png")
+                .to_str()
+                .unwrap_or("")
+                .to_owned(),
+            record_path: std::env::current_dir()
+                .unwrap_or_default()
+                .join("record")
+                .to_str()
+                .unwrap_or("")
+                .to_owned(),
         }
     }
 

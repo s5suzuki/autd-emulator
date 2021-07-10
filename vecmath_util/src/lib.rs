@@ -12,9 +12,10 @@ pub fn is_zero<T: std::cmp::PartialEq<T> + num_traits::Zero>(vec: &[T]) -> bool 
     true
 }
 
-pub fn vec3_map<F, T>(v: Vector3, func: F) -> [T; 3]
+pub fn vec3_map<F, I, O>(v: [I; 3], func: F) -> [O; 3]
 where
-    F: Fn(f32) -> T,
+    I: Copy,
+    F: Fn(I) -> O,
 {
     [func(v[0]), func(v[1]), func(v[2])]
 }
