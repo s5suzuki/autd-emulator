@@ -15,6 +15,7 @@ mod settings;
 
 use std::{collections::VecDeque, f32::consts::PI, time::Instant};
 
+use __core::f32;
 use acoustic_field_viewer::{
     camera_helper,
     sound_source::SoundSource,
@@ -560,6 +561,37 @@ impl App {
                             let idx = m.mod_data.len() - 1;
                             ui.text(format!("mod[{}]: {}", idx, m.mod_data[idx]));
                         }
+
+                        if ui
+                            .radio_button_bool(im_str!("show mod plot"), self.setting.show_mod_plot)
+                        {
+                            self.setting.show_mod_plot = !self.setting.show_mod_plot;
+                        }
+
+                        if self.setting.show_mod_plot {
+                            ui.separator();
+                            let mod_v = self.mod_values(|&v| ((v as f32) / 512.0 * PI).sin());
+                            PlotLines::new(ui, im_str!("mod plot"), &mod_v)
+                                .graph_size(self.setting.mod_plot_size)
+                                .build();
+                            if ui.radio_button_bool(
+                                im_str!("show mod plot (raw)"),
+                                self.setting.show_mod_plot_raw,
+                            ) {
+                                self.setting.show_mod_plot_raw = !self.setting.show_mod_plot_raw;
+                            }
+                            if self.setting.show_mod_plot_raw {
+                                ui.separator();
+                                let mod_v = self.mod_values(|&v| v as f32);
+                                PlotLines::new(ui, im_str!("mod plot (raw)"), &mod_v)
+                                    .graph_size(self.setting.mod_plot_size)
+                                    .build();
+                            }
+
+                            Drag::new(im_str!("plot size"))
+                                .range(0.0..=f32::INFINITY)
+                                .build_array(ui, &mut self.setting.mod_plot_size);
+                        }
                     }
 
                     if self.ctrl_flag.contains(RxGlobalControlFlags::SEQ_MODE) {
@@ -688,6 +720,17 @@ impl App {
         });
 
         update_flag
+    }
+
+    fn mod_values<F>(&self, f: F) -> Vec<f32>
+    where
+        F: Fn(&u8) -> f32,
+    {
+        if let Some(m) = &self.modulation {
+            m.mod_data.iter().map(f).collect()
+        } else {
+            vec![]
+        }
     }
 
     // TODO: This log system is not so efficient
