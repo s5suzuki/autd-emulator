@@ -23,11 +23,12 @@ void main() {
     for(float idx = 0.0; idx < 65536.0; idx++){
         if (idx >= u_trans_num) break;
         vec3 tp = texture(u_trans_pos, (idx+0.5) / u_trans_num).xyz;
-        float p = 2.0*PI*texture(u_trans_drive, (idx+0.5) / u_trans_num).x;
-        float amp = texture(u_trans_drive, (idx+0.5) / u_trans_num).y;
         float d = length(v_gpos - tp);
-        im += amp * cos(p - u_wavenum*d) / d;
-        re += amp * sin(p - u_wavenum*d) / d;
+        vec2 p_amp = texture(u_trans_drive, (idx+0.5) / u_trans_num).xy;
+        float p = 2.0*PI*p_amp.x;
+        float amp = p_amp.y / d;
+        im += amp * cos(p - u_wavenum*d);
+        re += amp * sin(p - u_wavenum*d);
     }
     float c = sqrt(re*re+im*im);
     o_Color = coloring(c/u_color_scale);

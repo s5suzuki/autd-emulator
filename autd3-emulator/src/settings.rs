@@ -11,10 +11,7 @@
  *
  */
 
-use acoustic_field_viewer::{
-    view::{render_system::RenderSystem, ViewerSettings},
-    Vector4,
-};
+use acoustic_field_viewer::view::{render_system::RenderSystem, ViewerSettings};
 use serde::{Deserialize, Serialize};
 use std::{
     fs::{File, OpenOptions},
@@ -22,18 +19,20 @@ use std::{
     path::Path,
 };
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Setting {
     pub port: u16,
     pub window_width: u32,
     pub window_height: u32,
-    pub background: Vector4,
     pub viewer_setting: ViewerSettings,
     pub log_enable: bool,
     pub log_max: u32,
     pub show_mod_plot: bool,
     pub show_mod_plot_raw: bool,
     pub mod_plot_size: [f32; 2],
+    pub save_file_enable: bool,
+    pub save_file_path: String,
+    pub record_path: String,
 }
 
 impl Setting {
@@ -42,13 +41,25 @@ impl Setting {
             port: 50632,
             window_width: 960,
             window_height: 640,
-            background: [0.3, 0.3, 0.3, 1.0],
             viewer_setting: ViewerSettings::new(),
             log_enable: true,
             log_max: 100,
             show_mod_plot: true,
             show_mod_plot_raw: false,
             mod_plot_size: [200.0, 50.],
+            save_file_enable: false,
+            save_file_path: std::env::current_dir()
+                .unwrap_or_default()
+                .join("image.png")
+                .to_str()
+                .unwrap_or("")
+                .to_owned(),
+            record_path: std::env::current_dir()
+                .unwrap_or_default()
+                .join("record")
+                .to_str()
+                .unwrap_or("")
+                .to_owned(),
         }
     }
 

@@ -13,9 +13,8 @@
 
 mod settings;
 
-use std::{collections::VecDeque, f32::consts::PI, time::Instant};
+use std::{collections::VecDeque, f32::consts::PI, path::Path, time::Instant};
 
-use __core::f32;
 use acoustic_field_viewer::{
     camera_helper,
     sound_source::SoundSource,
@@ -53,6 +52,11 @@ struct App {
     sequence: Option<Sequence>,
     delay_offset: Option<DelayOffset>,
     log_buf: VecDeque<String>,
+    #[cfg(feature = "offscreen_renderer")]
+    offscreen_renderer: offscreen_renderer::OffscreenRenderer,
+    save_path: ImString,
+    record_path: ImString,
+    recording: bool,
 }
 
 impl App {
@@ -61,22 +65,30 @@ impl App {
         let sound_source_viewer = SoundSourceViewer::new(&system.render_sys, opengl);
         let field_slice_viewer =
             AcousticFiledSliceViewer::new(&system.render_sys, opengl, &setting.viewer_setting);
+        let view_projection = system
+            .render_sys
+            .get_view_projection(&setting.viewer_setting);
 
+        let save_path = ImString::new(&setting.save_file_path);
+        let record_path = ImString::new(&setting.record_path);
         Self {
             setting,
             sources: Vec::new(),
             last_amp: Vec::new(),
             sound_source_viewer,
             field_slice_viewer,
-            view_projection: system
-                .render_sys
-                .get_view_projection(&setting.viewer_setting),
+            view_projection,
             init: true,
             ctrl_flag: RxGlobalControlFlags::empty(),
             modulation: None,
             sequence: None,
             delay_offset: None,
             log_buf: VecDeque::new(),
+            #[cfg(feature = "offscreen_renderer")]
+            offscreen_renderer: offscreen_renderer::OffscreenRenderer::new(),
+            save_path,
+            record_path,
+            recording: false,
         }
     }
 
@@ -127,8 +139,22 @@ impl App {
             let mut update_flag = self.handle_autd(&mut autd_server);
             update_flag |= self.update_ui(&ui, &mut render_sys);
             self.update_view(&mut render_sys, update_flag);
+            #[cfg(feature = "offscreen_renderer")]
+            {
+                if self.setting.save_file_enable {
+                    self.offscreen_renderer.update(
+                        &self.sources,
+                        &self.field_slice_viewer,
+                        &self.setting.viewer_setting,
+                        update_flag,
+                    );
+                }
+            }
 
-            encoder.clear(&render_sys.output_color, self.setting.background);
+            encoder.clear(
+                &render_sys.output_color,
+                self.setting.viewer_setting.background,
+            );
             encoder.clear_depth(&render_sys.output_stencil, 1.0);
             self.sound_source_viewer.renderer(&mut encoder);
             self.field_slice_viewer.renderer(&mut encoder);
@@ -149,6 +175,8 @@ impl App {
             render_sys.device.cleanup();
         }
 
+        self.setting.save_file_path = self.save_path.to_str().to_owned();
+        self.setting.record_path = self.record_path.to_str().to_owned();
         self.setting.merge_render_sys(&render_sys);
         self.setting.save("setting.json");
     }
@@ -391,6 +419,62 @@ impl App {
                             .rotate_to(self.setting.viewer_setting.slice_angle);
                         update_flag |= UpdateFlag::UPDATE_SLICE_POS;
                     }
+
+                    #[cfg(feature = "offscreen_renderer")]
+                    {
+                        ui.separator();
+                        ui.text(im_str!("Save as file"));
+                        if ui.radio_button_bool(
+                            im_str!("save enable"),
+                            self.setting.save_file_enable,
+                        ) {
+                            self.setting.save_file_enable = !self.setting.save_file_enable;
+                        }
+                        if self.setting.save_file_enable {
+                            InputText::new(ui, im_str!("save path"), &mut self.save_path).build();
+                            if ui.small_button(im_str!("save")) {
+                                self.offscreen_renderer
+                                    .calculate_field(&self.sources, &self.setting.viewer_setting);
+                                let bb = (
+                                    self.setting.viewer_setting.slice_width as usize,
+                                    self.setting.viewer_setting.slice_height as usize,
+                                );
+                                self.offscreen_renderer.save(
+                                    self.save_path.to_str(),
+                                    bb,
+                                    self.field_slice_viewer.color_map(),
+                                );
+                            }
+
+                            ui.separator();
+                            InputText::new(ui, im_str!("record path"), &mut self.record_path)
+                                .build();
+                            if ui.small_button(if self.recording {
+                                im_str!("stop recording")
+                            } else {
+                                im_str!("record")
+                            }) {
+                                self.recording = !self.recording;
+                            }
+                            if self.recording {
+                                self.offscreen_renderer
+                                    .calculate_field(&self.sources, &self.setting.viewer_setting);
+                                let bb = (
+                                    self.setting.viewer_setting.slice_width as usize,
+                                    self.setting.viewer_setting.slice_height as usize,
+                                );
+                                std::fs::create_dir_all(self.record_path.to_str()).unwrap();
+                                let date = chrono::Local::now();
+                                let path = Path::new(self.record_path.to_str())
+                                    .join(format!("{}", date.format("%Y-%m-%d_%H-%M-%S_%3f.png")));
+                                self.offscreen_renderer.save(
+                                    &path,
+                                    bb,
+                                    self.field_slice_viewer.color_map(),
+                                );
+                            }
+                        }
+                    }
                 });
                 TabItem::new(im_str!("Camera")).build(&ui, || {
                     ui.text(im_str!("Camera pos"));
@@ -501,9 +585,12 @@ impl App {
                         update_flag |= UpdateFlag::UPDATE_SOURCE_ALPHA;
                     }
                     ui.separator();
-                    ColorPicker::new(im_str!("Background"), &mut self.setting.background)
-                        .alpha(true)
-                        .build(&ui);
+                    ColorPicker::new(
+                        im_str!("Background"),
+                        &mut self.setting.viewer_setting.background,
+                    )
+                    .alpha(true)
+                    .build(&ui);
                 });
                 TabItem::new(im_str!("Info")).build(&ui, || {
                     ui.text("Control flag");

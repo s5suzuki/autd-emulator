@@ -1,3 +1,5 @@
 /target
 setting.json
 imgui.ini
+*.zip
+*.png
