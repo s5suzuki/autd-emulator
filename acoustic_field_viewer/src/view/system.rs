@@ -4,7 +4,7 @@
  * Created Date: 08/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 09/07/2021
+ * Last Modified: 10/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -39,7 +39,6 @@ impl System {
             .with_inner_size(LogicalSize::new(width, heigh));
 
         let mut imgui = Context::create();
-        // imgui.set_ini_filename(Some("imgui.ini"));
 
         let mut platform = WinitPlatform::init(&mut imgui);
 
