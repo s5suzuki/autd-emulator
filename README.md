@@ -8,6 +8,8 @@
 cargo run --release
 ```
 
+or execute `autd-emulator.exe`
+
 # Limitations
 
 * `Modulation` and `Sequence` will not be displayed

@@ -1,0 +1,73 @@
+on:
+  push:
+    tags:
+    - 'v*'
+
+name: Upload Release Asset
+
+jobs:   
+  release:
+    name: Create Github Release
+    runs-on: ubuntu-latest
+    steps:
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1.0.0
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        draft: false
+        prerelease: false
+    - name: Output Release URL File
+      run: echo "${{ steps.create_release.outputs.upload_url }}" > release_url.txt
+    - name: Save Release URL File for publish
+      uses: actions/upload-artifact@v1
+      with:
+        name: release_url
+        path: release_url.txt
+  
+  publish_win:
+    needs: [release]
+    name: Upload Release Asset Windows
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: Get the version
+        id: get_version
+        uses: actions/github-script@0.5.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          result-encoding: string
+          script: |
+            return 'autd3-emulator'+context.payload.ref.replace(/refs\/tags\//, '')+'-win';
+      - name: Checkout submodules
+        run: git submodule update --init --force --recursive
+      - name: setup-msbuild
+        uses: microsoft/setup-msbuild@v1
+      - name: Build project x64
+        run: |
+          cargo build --release
+          Compress-Archive -Path LICENSE, README.md, target/release/autd-emulator.exe -DestinationPath assets_x64.zip
+      - name: Load Release URL File from release job
+        uses: actions/download-artifact@v1
+        with:
+          name: release_url
+      - name: Get Release File Name & Upload URL
+        id: get_release_info
+        run: |
+          $value=cat release_url/release_url.txt
+          echo "::set-output name=upload_url::$value"
+      - name: Upload Release Asset
+        id: upload-release-asset-win64
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.get_release_info.outputs.upload_url }}
+          asset_path: ./assets_x64.zip
+          asset_name: ${{ steps.get_version.outputs.result }}-x64.zip
+          asset_content_type: application/zip
+  

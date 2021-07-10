@@ -4,7 +4,7 @@
  * Created Date: 29/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 09/07/2021
+ * Last Modified: 10/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -16,7 +16,7 @@ use std::mem::size_of;
 use autd3_core::hardware_defined::{RxGlobalControlFlags, RxGlobalHeader};
 
 use crate::{
-    autd_data::{AUTDData, Gain, Geometry, Modulation},
+    autd_data::{AutdData, Gain, Geometry, Modulation},
     DelayOffset, SeqFocus, Sequence, Vector3,
 };
 
@@ -39,7 +39,7 @@ impl Parser {
         }
     }
 
-    pub fn parse(&mut self, raw_buf: Vec<u8>) -> Vec<AUTDData> {
+    pub fn parse(&mut self, raw_buf: Vec<u8>) -> Vec<AutdData> {
         let mut res = Vec::new();
 
         let (cmd, ctrl_flag) = unsafe {
@@ -47,48 +47,48 @@ impl Parser {
             ((*header).command, (*header).ctrl_flag)
         };
 
-        res.push(AUTDData::CtrlFlag(ctrl_flag));
+        res.push(AutdData::CtrlFlag(ctrl_flag));
         match cmd {
-            autd3_core::hardware_defined::CommandType::Clear => res.push(AUTDData::Clear),
+            autd3_core::hardware_defined::CommandType::Clear => res.push(AutdData::Clear),
             autd3_core::hardware_defined::CommandType::Op => {
-                res.push(AUTDData::Resume);
+                res.push(AutdData::Resume);
                 if let Some(modulation) = self.parse_as_modulation(&raw_buf) {
-                    res.push(AUTDData::Modulation(modulation));
+                    res.push(AutdData::Modulation(modulation));
                 }
 
                 if raw_buf.len() > size_of::<RxGlobalHeader>() {
                     let gain = Self::parse_as_gain(&raw_buf[size_of::<RxGlobalHeader>()..]);
-                    res.push(AUTDData::Gain(gain));
+                    res.push(AutdData::Gain(gain));
                 }
             }
             autd3_core::hardware_defined::CommandType::ReadCpuVerLsb => {
-                res.push(AUTDData::RequestCPUVerLSB)
+                res.push(AutdData::RequestCpuVerLsb)
             }
             autd3_core::hardware_defined::CommandType::ReadCpuVerMsb => {
-                res.push(AUTDData::RequestCPUVerMSB)
+                res.push(AutdData::RequestCpuVerMsb)
             }
             autd3_core::hardware_defined::CommandType::ReadFpgaVerLsb => {
-                res.push(AUTDData::RequestFPGAVerLSB)
+                res.push(AutdData::RequestFpgaVerLsb)
             }
             autd3_core::hardware_defined::CommandType::ReadFpgaVerMsb => {
-                res.push(AUTDData::RequestFPGAVerMSB)
+                res.push(AutdData::RequestFpgaVerMsb)
             }
             autd3_core::hardware_defined::CommandType::SeqMode => {
                 if let Some(sequence) = self.parse_as_sequence(&raw_buf) {
-                    res.push(AUTDData::Sequence(sequence));
-                    res.push(AUTDData::Resume);
+                    res.push(AutdData::Sequence(sequence));
+                    res.push(AutdData::Resume);
                 }
             }
             autd3_core::hardware_defined::CommandType::SetDelay => {
                 let delay_enable =
                     Self::parse_as_delay_enable(&raw_buf[size_of::<RxGlobalHeader>()..]);
-                res.push(AUTDData::DelayOffset(delay_enable));
+                res.push(AutdData::DelayOffset(delay_enable));
             }
-            autd3_core::hardware_defined::CommandType::Pause => res.push(AUTDData::Pause),
-            autd3_core::hardware_defined::CommandType::Resume => res.push(AUTDData::Resume),
+            autd3_core::hardware_defined::CommandType::Pause => res.push(AutdData::Pause),
+            autd3_core::hardware_defined::CommandType::Resume => res.push(AutdData::Resume),
             autd3_core::hardware_defined::CommandType::EmulatorSetGeometry => {
                 let geo = Self::parse_as_geometry(&raw_buf[size_of::<RxGlobalHeader>()..]);
-                res.push(AUTDData::Geometries(geo))
+                res.push(AutdData::Geometries(geo))
             }
         }
 

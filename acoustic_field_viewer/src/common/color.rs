@@ -4,7 +4,7 @@
  * Created Date: 27/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 27/04/2020
+ * Last Modified: 10/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -16,14 +16,14 @@ pub trait Color {
     fn hsva(&self) -> [f32; 4];
 }
 
-pub struct HSV {
+pub struct Hsv {
     pub h: f32,
     pub s: f32,
     pub v: f32,
     pub a: f32,
 }
 
-impl Color for HSV {
+impl Color for Hsv {
     #[allow(clippy::many_single_char_names)]
     fn rgba(&self) -> [f32; 4] {
         let h = self.h % 1.0;

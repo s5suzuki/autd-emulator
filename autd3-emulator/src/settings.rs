@@ -31,6 +31,9 @@ pub struct Setting {
     pub viewer_setting: ViewerSettings,
     pub log_enable: bool,
     pub log_max: u32,
+    pub show_mod_plot: bool,
+    pub show_mod_plot_raw: bool,
+    pub mod_plot_size: [f32; 2],
 }
 
 impl Setting {
@@ -43,11 +46,15 @@ impl Setting {
             viewer_setting: ViewerSettings::new(),
             log_enable: true,
             log_max: 100,
+            show_mod_plot: true,
+            show_mod_plot_raw: false,
+            mod_plot_size: [200.0, 50.],
         }
     }
 
     pub fn merge_render_sys(&mut self, render_sys: &RenderSystem) {
-        let size = render_sys.window().inner_size();
+        let scale_factor = render_sys.window().scale_factor();
+        let size = render_sys.window().inner_size().to_logical(scale_factor);
         self.window_width = size.width;
         self.window_height = size.height;
     }

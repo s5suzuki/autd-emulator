@@ -4,7 +4,7 @@
  * Created Date: 07/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 09/07/2021
+ * Last Modified: 10/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -88,7 +88,7 @@ pub struct Geometry {
 }
 
 #[derive(Debug)]
-pub enum AUTDData {
+pub enum AutdData {
     Modulation(Modulation),
     Gain(Gain),
     Geometries(Vec<Geometry>),
@@ -96,10 +96,10 @@ pub enum AUTDData {
     Clear,
     Pause,
     Resume,
-    RequestFPGAVerMSB,
-    RequestFPGAVerLSB,
-    RequestCPUVerMSB,
-    RequestCPUVerLSB,
+    RequestFpgaVerMsb,
+    RequestFpgaVerLsb,
+    RequestCpuVerMsb,
+    RequestCpuVerLsb,
     Sequence(Sequence),
     DelayOffset(DelayOffset),
 }

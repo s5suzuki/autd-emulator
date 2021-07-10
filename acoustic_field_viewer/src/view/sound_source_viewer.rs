@@ -30,7 +30,7 @@ use glutin::event::{Event, WindowEvent};
 use shader_version::{glsl::GLSL, OpenGL, Shaders};
 
 use crate::{
-    coloring_method::{coloring_hsv, ColoringMethod},
+    common::coloring_method::{coloring_hsv, ColoringMethod},
     common::texture::create_texture_resource,
     sound_source::SoundSource,
     view::{render_system, render_system::RenderSystem, UpdateFlag, ViewerSettings},
@@ -141,8 +141,11 @@ impl SoundSourceViewer {
             }
 
             for (i, source) in sources.iter().enumerate() {
-                self.pipe_data_list[i].i_color =
-                    (self.coloring_method)(source.phase / (2.0 * PI), source.amp);
+                self.pipe_data_list[i].i_color = (self.coloring_method)(
+                    source.phase / (2.0 * PI),
+                    source.amp,
+                    settings.source_alpha,
+                );
             }
         }
 
