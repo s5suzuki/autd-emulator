@@ -4,7 +4,7 @@
  * Created Date: 06/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 10/07/2021
+ * Last Modified: 11/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -13,7 +13,9 @@
 
 mod settings;
 
-use std::{collections::VecDeque, f32::consts::PI, path::Path, time::Instant};
+#[cfg(feature = "offscreen_renderer")]
+use std::path::Path;
+use std::{collections::VecDeque, f32::consts::PI, time::Instant};
 
 use acoustic_field_viewer::{
     camera_helper,
@@ -56,6 +58,7 @@ struct App {
     offscreen_renderer: offscreen_renderer::OffscreenRenderer,
     save_path: ImString,
     record_path: ImString,
+    #[allow(dead_code)]
     recording: bool,
 }
 

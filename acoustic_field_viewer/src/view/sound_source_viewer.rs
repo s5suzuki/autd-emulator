@@ -4,7 +4,7 @@
  * Created Date: 27/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 10/07/2021
+ * Last Modified: 11/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -219,7 +219,7 @@ impl SoundSourceViewer {
             .create_pipeline_simple(
                 Shaders::new()
                     .set(
-                        GLSL::V4_50,
+                        GLSL::V1_50,
                         include_str!("../../../assets/shaders/circle.vert"),
                     )
                     .get(version)
@@ -227,7 +227,7 @@ impl SoundSourceViewer {
                     .as_bytes(),
                 Shaders::new()
                     .set(
-                        GLSL::V4_50,
+                        GLSL::V1_50,
                         include_str!("../../../assets/shaders/circle.frag"),
                     )
                     .get(version)

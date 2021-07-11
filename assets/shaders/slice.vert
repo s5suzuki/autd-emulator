@@ -1,4 +1,4 @@
-#version 450 core
+#version 150 core
 
 in ivec3 a_pos;
 out vec3 v_gpos;
