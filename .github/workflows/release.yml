@@ -42,7 +42,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           result-encoding: string
           script: |
-            return 'autd3-emulator'+context.payload.ref.replace(/refs\/tags\//, '')+'-win';
+            return 'autd3-emulator-'+context.payload.ref.replace(/refs\/tags\//, '')+'-win';
       - name: Checkout submodules
         run: git submodule update --init --force --recursive
       - uses: seanmiddleditch/gha-setup-ninja@master
