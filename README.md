@@ -1,6 +1,6 @@
 # Emulator for [autd3-library](https://github.com/shinolab/autd3-library-software)
 
-* version 0.3.0
+* version 0.3.1
 
 # Build & Run
 
