@@ -4,7 +4,7 @@
  * Created Date: 06/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 11/07/2021
+ * Last Modified: 12/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -428,13 +428,14 @@ impl App {
                         ui.separator();
                         ui.text(im_str!("Save as file"));
                         if ui.radio_button_bool(
-                            im_str!("save enable"),
+                            im_str!("enable save"),
                             self.setting.save_file_enable,
                         ) {
                             self.setting.save_file_enable = !self.setting.save_file_enable;
                         }
                         if self.setting.save_file_enable {
-                            InputText::new(ui, im_str!("save path"), &mut self.save_path).build();
+                            InputText::new(ui, im_str!("path to image"), &mut self.save_path)
+                                .build();
                             if ui.small_button(im_str!("save")) {
                                 self.offscreen_renderer
                                     .calculate_field(&self.sources, &self.setting.viewer_setting);
@@ -450,8 +451,12 @@ impl App {
                             }
 
                             ui.separator();
-                            InputText::new(ui, im_str!("record path"), &mut self.record_path)
-                                .build();
+                            InputText::new(
+                                ui,
+                                im_str!("path to recorded images"),
+                                &mut self.record_path,
+                            )
+                            .build();
                             if ui.small_button(if self.recording {
                                 im_str!("stop recording")
                             } else {
