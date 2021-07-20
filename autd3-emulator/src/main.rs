@@ -14,7 +14,11 @@
 mod settings;
 
 #[cfg(feature = "offscreen_renderer")]
-use std::path::Path;
+mod offscreen_render_sys;
+
+#[cfg(feature = "offscreen_renderer")]
+use offscreen_render_sys::*;
+
 use std::{collections::VecDeque, f32::consts::PI, time::Instant};
 
 use acoustic_field_viewer::{
@@ -55,11 +59,7 @@ struct App {
     delay_offset: Option<DelayOffset>,
     log_buf: VecDeque<String>,
     #[cfg(feature = "offscreen_renderer")]
-    offscreen_renderer: offscreen_renderer::OffscreenRenderer,
-    save_path: ImString,
-    record_path: ImString,
-    #[allow(dead_code)]
-    recording: bool,
+    offscreen_render_sys: OffscreenRenderSystem,
 }
 
 impl App {
@@ -72,8 +72,9 @@ impl App {
             .render_sys
             .get_view_projection(&setting.viewer_setting);
 
-        let save_path = ImString::new(&setting.save_file_path);
-        let record_path = ImString::new(&setting.record_path);
+        #[cfg(feature = "offscreen_renderer")]
+        let offscreen_render_sys = OffscreenRenderSystem::new(&setting);
+
         Self {
             setting,
             sources: Vec::new(),
@@ -88,10 +89,7 @@ impl App {
             delay_offset: None,
             log_buf: VecDeque::new(),
             #[cfg(feature = "offscreen_renderer")]
-            offscreen_renderer: offscreen_renderer::OffscreenRenderer::new(),
-            save_path,
-            record_path,
-            recording: false,
+            offscreen_render_sys,
         }
     }
 
@@ -144,14 +142,7 @@ impl App {
             self.update_view(&mut render_sys, update_flag);
             #[cfg(feature = "offscreen_renderer")]
             {
-                if self.setting.save_file_enable {
-                    self.offscreen_renderer.update(
-                        &self.sources,
-                        &self.field_slice_viewer,
-                        &self.setting.viewer_setting,
-                        update_flag,
-                    );
-                }
+                self.offscreen_render_sys.update_flag_for_save |= update_flag;
             }
 
             encoder.clear(
@@ -178,8 +169,11 @@ impl App {
             render_sys.device.cleanup();
         }
 
-        self.setting.save_file_path = self.save_path.to_str().to_owned();
-        self.setting.record_path = self.record_path.to_str().to_owned();
+        #[cfg(feature = "offscreen_renderer")]
+        {
+            self.setting.save_file_path = self.offscreen_render_sys.save_path.to_str().to_owned();
+            self.setting.record_path = self.offscreen_render_sys.record_path.to_str().to_owned();
+        }
         self.setting.merge_render_sys(&render_sys);
         self.setting.save("setting.json");
     }
@@ -427,60 +421,74 @@ impl App {
                     {
                         ui.separator();
                         ui.text(im_str!("Save as file"));
-                        if ui.radio_button_bool(
-                            im_str!("enable save"),
-                            self.setting.save_file_enable,
-                        ) {
-                            self.setting.save_file_enable = !self.setting.save_file_enable;
+                        InputText::new(
+                            ui,
+                            im_str!("path to image"),
+                            &mut self.offscreen_render_sys.save_path,
+                        )
+                        .build();
+                        if ui.small_button(im_str!("save")) {
+                            self.offscreen_render_sys.offscreen_renderer.update(
+                                &self.sources,
+                                &self.field_slice_viewer,
+                                &self.setting.viewer_setting,
+                                self.offscreen_render_sys.update_flag_for_save,
+                            );
+                            self.offscreen_render_sys.update_flag_for_save = UpdateFlag::empty();
+                            self.offscreen_render_sys
+                                .offscreen_renderer
+                                .calculate_field(&self.sources, &self.setting.viewer_setting);
+                            let bb = (
+                                self.setting.viewer_setting.slice_width as usize,
+                                self.setting.viewer_setting.slice_height as usize,
+                            );
+                            self.offscreen_render_sys.offscreen_renderer.save(
+                                self.offscreen_render_sys.save_path.to_str(),
+                                bb,
+                                self.field_slice_viewer.color_map(),
+                            );
                         }
-                        if self.setting.save_file_enable {
-                            InputText::new(ui, im_str!("path to image"), &mut self.save_path)
-                                .build();
-                            if ui.small_button(im_str!("save")) {
-                                self.offscreen_renderer
-                                    .calculate_field(&self.sources, &self.setting.viewer_setting);
-                                let bb = (
-                                    self.setting.viewer_setting.slice_width as usize,
-                                    self.setting.viewer_setting.slice_height as usize,
-                                );
-                                self.offscreen_renderer.save(
-                                    self.save_path.to_str(),
-                                    bb,
-                                    self.field_slice_viewer.color_map(),
-                                );
-                            }
 
-                            ui.separator();
-                            InputText::new(
-                                ui,
-                                im_str!("path to recorded images"),
-                                &mut self.record_path,
-                            )
-                            .build();
-                            if ui.small_button(if self.recording {
-                                im_str!("stop recording")
-                            } else {
-                                im_str!("record")
-                            }) {
-                                self.recording = !self.recording;
-                            }
-                            if self.recording {
-                                self.offscreen_renderer
-                                    .calculate_field(&self.sources, &self.setting.viewer_setting);
-                                let bb = (
-                                    self.setting.viewer_setting.slice_width as usize,
-                                    self.setting.viewer_setting.slice_height as usize,
-                                );
-                                std::fs::create_dir_all(self.record_path.to_str()).unwrap();
-                                let date = chrono::Local::now();
-                                let path = Path::new(self.record_path.to_str())
-                                    .join(format!("{}", date.format("%Y-%m-%d_%H-%M-%S_%3f.png")));
-                                self.offscreen_renderer.save(
-                                    &path,
-                                    bb,
-                                    self.field_slice_viewer.color_map(),
-                                );
-                            }
+                        ui.separator();
+                        InputText::new(
+                            ui,
+                            im_str!("path to recorded images"),
+                            &mut self.offscreen_render_sys.record_path,
+                        )
+                        .build();
+                        if ui.small_button(if self.offscreen_render_sys.recording {
+                            im_str!("stop recording")
+                        } else {
+                            im_str!("record")
+                        }) {
+                            self.offscreen_render_sys.recording =
+                                !self.offscreen_render_sys.recording;
+                        }
+                        if self.offscreen_render_sys.recording {
+                            self.offscreen_render_sys.offscreen_renderer.update(
+                                &self.sources,
+                                &self.field_slice_viewer,
+                                &self.setting.viewer_setting,
+                                self.offscreen_render_sys.update_flag_for_save,
+                            );
+                            self.offscreen_render_sys.update_flag_for_save = UpdateFlag::empty();
+                            self.offscreen_render_sys
+                                .offscreen_renderer
+                                .calculate_field(&self.sources, &self.setting.viewer_setting);
+                            let bb = (
+                                self.setting.viewer_setting.slice_width as usize,
+                                self.setting.viewer_setting.slice_height as usize,
+                            );
+                            std::fs::create_dir_all(self.offscreen_render_sys.record_path.to_str())
+                                .unwrap();
+                            let date = chrono::Local::now();
+                            let path = Path::new(self.offscreen_render_sys.record_path.to_str())
+                                .join(format!("{}", date.format("%Y-%m-%d_%H-%M-%S_%3f.png")));
+                            self.offscreen_render_sys.offscreen_renderer.save(
+                                &path,
+                                bb,
+                                self.field_slice_viewer.color_map(),
+                            );
                         }
                     }
                 });
