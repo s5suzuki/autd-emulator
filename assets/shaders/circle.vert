@@ -1,4 +1,4 @@
-#version 450 core
+#version 150 core
 
 in ivec3 a_pos;
 in ivec2 a_tex_coord;

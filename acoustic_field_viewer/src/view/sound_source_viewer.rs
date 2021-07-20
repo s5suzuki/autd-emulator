@@ -4,7 +4,7 @@
  * Created Date: 27/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 10/07/2021
+ * Last Modified: 20/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -133,7 +133,7 @@ impl SoundSourceViewer {
                 self.models[i][3][0] = source.pos[0];
                 self.models[i][3][1] = source.pos[1];
                 self.models[i][3][2] = source.pos[2];
-                let rot = vecmath_util::quaternion_to([0., 0., 1.], source.dir);
+                let rot = vecmath_util::quaternion_to(source.dir, [0., 0., 1.]);
                 let rotm = vecmath_util::mat4_rot(rot);
                 self.models[i] = vecmath::col_mat4_mul(self.models[i], rotm);
             }
@@ -219,7 +219,7 @@ impl SoundSourceViewer {
             .create_pipeline_simple(
                 Shaders::new()
                     .set(
-                        GLSL::V4_50,
+                        GLSL::V1_50,
                         include_str!("../../../assets/shaders/circle.vert"),
                     )
                     .get(version)
@@ -227,7 +227,7 @@ impl SoundSourceViewer {
                     .as_bytes(),
                 Shaders::new()
                     .set(
-                        GLSL::V4_50,
+                        GLSL::V1_50,
                         include_str!("../../../assets/shaders/circle.frag"),
                     )
                     .get(version)

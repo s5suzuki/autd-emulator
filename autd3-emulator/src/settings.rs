@@ -4,7 +4,7 @@
  * Created Date: 05/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 10/07/2021
+ * Last Modified: 20/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -30,7 +30,6 @@ pub struct Setting {
     pub show_mod_plot: bool,
     pub show_mod_plot_raw: bool,
     pub mod_plot_size: [f32; 2],
-    pub save_file_enable: bool,
     pub save_file_path: String,
     pub record_path: String,
 }
@@ -47,7 +46,6 @@ impl Setting {
             show_mod_plot: true,
             show_mod_plot_raw: false,
             mod_plot_size: [200.0, 50.],
-            save_file_enable: false,
             save_file_path: std::env::current_dir()
                 .unwrap_or_default()
                 .join("image.png")
