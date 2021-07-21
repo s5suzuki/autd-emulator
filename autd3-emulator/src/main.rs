@@ -4,7 +4,7 @@
  * Created Date: 06/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 12/07/2021
+ * Last Modified: 21/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -31,9 +31,11 @@ use acoustic_field_viewer::{
     Matrix4,
 };
 use autd3_core::hardware_defined::{
-    RxGlobalControlFlags, MOD_SAMPLING_FREQ_BASE, POINT_SEQ_BASE_FREQ,
+    RxGlobalControlFlags, MOD_SAMPLING_FREQ_BASE, NUM_TRANS_IN_UNIT, SEQ_BASE_FREQ,
 };
-use autd3_emulator_server::{AutdData, AutdServer, DelayOffset, Modulation, Sequence};
+use autd3_emulator_server::{
+    AutdData, AutdServer, DelayOffset, GainSequence, Modulation, PointSequence,
+};
 use gfx::Device;
 use glutin::{
     event::{Event, WindowEvent},
@@ -48,6 +50,7 @@ use crate::settings::Setting;
 struct App {
     setting: Setting,
     sources: Vec<SoundSource>,
+    dev_num: usize,
     last_amp: Vec<f32>,
     sound_source_viewer: SoundSourceViewer,
     field_slice_viewer: AcousticFiledSliceViewer,
@@ -55,7 +58,8 @@ struct App {
     init: bool,
     ctrl_flag: RxGlobalControlFlags,
     modulation: Option<Modulation>,
-    sequence: Option<Sequence>,
+    point_sequence: Option<PointSequence>,
+    gain_sequence: Option<GainSequence>,
     delay_offset: Option<DelayOffset>,
     log_buf: VecDeque<String>,
     #[cfg(feature = "offscreen_renderer")]
@@ -78,6 +82,7 @@ impl App {
         Self {
             setting,
             sources: Vec::new(),
+            dev_num: 0,
             last_amp: Vec::new(),
             sound_source_viewer,
             field_slice_viewer,
@@ -85,7 +90,8 @@ impl App {
             init: true,
             ctrl_flag: RxGlobalControlFlags::empty(),
             modulation: None,
-            sequence: None,
+            point_sequence: None,
+            gain_sequence: None,
             delay_offset: None,
             log_buf: VecDeque::new(),
             #[cfg(feature = "offscreen_renderer")]
@@ -200,6 +206,7 @@ impl App {
                 match d {
                     AutdData::Geometries(geometries) => {
                         self.sources.clear();
+                        self.dev_num = geometries.len();
                         for geometry in geometries {
                             for trans in geometry.make_autd_transducers() {
                                 self.sources.push(trans);
@@ -228,7 +235,8 @@ impl App {
                             source.phase = 0.;
                         }
                         self.modulation = None;
-                        self.sequence = None;
+                        self.point_sequence = None;
+                        self.gain_sequence = None;
                         self.delay_offset = None;
                         self.log("clear");
                         update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
@@ -269,9 +277,15 @@ impl App {
                     AutdData::RequestCpuVerLsb => {
                         self.log("req cpu ver lsb");
                     }
-                    AutdData::Sequence(seq) => {
-                        self.sequence = Some(seq);
-                        self.log("receive sequence");
+                    AutdData::PointSequence(seq) => {
+                        self.point_sequence = Some(seq);
+                        self.gain_sequence = None;
+                        self.log("receive point sequence");
+                    }
+                    AutdData::GainSequence(seq) => {
+                        self.point_sequence = None;
+                        self.gain_sequence = Some(seq);
+                        self.log("receive gain sequence");
                     }
                     AutdData::DelayOffset(d) => {
                         self.delay_offset = Some(d);
@@ -699,12 +713,11 @@ impl App {
 
                     if self.ctrl_flag.contains(RxGlobalControlFlags::SEQ_MODE) {
                         ui.separator();
-                        ui.text("Sequence mode");
-                        if let Some(seq) = &self.sequence {
+                        if let Some(seq) = &self.point_sequence {
+                            ui.text("PointSequence mode");
                             ui.text(format!("Sequence size: {}", seq.seq_data.len()));
                             ui.text(format!("Sequence division: {}", seq.seq_div));
-                            let smpl_period =
-                                (1000000 / POINT_SEQ_BASE_FREQ) * seq.seq_div as usize;
+                            let smpl_period = (1000000 / SEQ_BASE_FREQ) * seq.seq_div as usize;
                             ui.text(format!("Sequence sampling period: {} [us]", smpl_period));
                             ui.text(format!(
                                 "Sequence period: {} [us]",
@@ -729,6 +742,48 @@ impl App {
                                 ui.text(format!(
                                     "seq[{}]: {:?} / {}",
                                     idx, seq.seq_data[idx].0, seq.seq_data[idx].1
+                                ));
+                            }
+                        }
+                        if let Some(seq) = &self.gain_sequence {
+                            ui.text("GainSequence mode");
+                            ui.text(format!("Sequence size: {}", seq.seq_data.len()));
+                            ui.text(format!("Sequence division: {}", seq.seq_div));
+                            let smpl_period = (1000000 / SEQ_BASE_FREQ) * seq.seq_div as usize;
+                            ui.text(format!("Sequence sampling period: {} [us]", smpl_period));
+                            ui.text(format!(
+                                "Sequence period: {} [us]",
+                                smpl_period * seq.seq_data.len()
+                            ));
+                            if !seq.seq_data.is_empty() {
+                                ui.text(format!(
+                                    "seq[0][0][0]...seq[0][{}][{}]: {:x}...{:x}",
+                                    self.dev_num,
+                                    NUM_TRANS_IN_UNIT - 1,
+                                    seq.seq_data[0][0][0],
+                                    seq.seq_data[0][self.dev_num - 1][NUM_TRANS_IN_UNIT - 1]
+                                ));
+                            }
+                            if seq.seq_data.len() == 2 || seq.seq_data.len() == 3 {
+                                ui.text(format!(
+                                    "seq[1][0][0]...seq[1][{}][{}]: {:x}...{:x}",
+                                    self.dev_num,
+                                    NUM_TRANS_IN_UNIT - 1,
+                                    seq.seq_data[1][0][0],
+                                    seq.seq_data[1][self.dev_num - 1][NUM_TRANS_IN_UNIT - 1]
+                                ));
+                            } else if seq.seq_data.len() > 3 {
+                                ui.text("...");
+                            }
+                            if seq.seq_data.len() >= 3 {
+                                let idx = seq.seq_data.len() - 1;
+                                ui.text(format!(
+                                    "seq[{0}][0][0]...seq[{0}][{1}][{2}]: {3:x}...{4:x}",
+                                    idx,
+                                    self.dev_num,
+                                    NUM_TRANS_IN_UNIT - 1,
+                                    seq.seq_data[0][0][0],
+                                    seq.seq_data[0][self.dev_num - 1][NUM_TRANS_IN_UNIT - 1]
                                 ));
                             }
                         }

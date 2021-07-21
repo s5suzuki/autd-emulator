@@ -4,7 +4,7 @@
  * Created Date: 07/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 10/07/2021
+ * Last Modified: 21/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -13,7 +13,7 @@
 
 use acoustic_field_viewer::sound_source::SoundSource;
 use autd3_core::hardware_defined::{
-    RxGlobalControlFlags, NUM_TRANS_X, NUM_TRANS_Y, TRANS_SPACING_MM,
+    DataArray, RxGlobalControlFlags, NUM_TRANS_X, NUM_TRANS_Y, TRANS_SPACING_MM,
 };
 
 use crate::Vector3;
@@ -70,9 +70,15 @@ impl SeqFocus {
 }
 
 #[derive(Debug)]
-pub struct Sequence {
+pub struct PointSequence {
     pub seq_div: u16,
     pub seq_data: Vec<(Vector3, u8)>,
+}
+
+#[derive(Debug)]
+pub struct GainSequence {
+    pub seq_div: u16,
+    pub seq_data: Vec<Vec<DataArray>>,
 }
 
 #[derive(Debug)]
@@ -100,7 +106,8 @@ pub enum AutdData {
     RequestFpgaVerLsb,
     RequestCpuVerMsb,
     RequestCpuVerLsb,
-    Sequence(Sequence),
+    PointSequence(PointSequence),
+    GainSequence(GainSequence),
     DelayOffset(DelayOffset),
 }
 

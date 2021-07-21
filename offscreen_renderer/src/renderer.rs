@@ -4,7 +4,7 @@
  * Created Date: 10/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 12/07/2021
+ * Last Modified: 21/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -21,16 +21,14 @@ use acoustic_field_viewer::{
 use scarlet::prelude::RGBColor;
 use vulkano::{
     buffer::{BufferUsage, CpuAccessibleBuffer},
-    command_buffer::AutoCommandBufferBuilder,
+    command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage},
     descriptor::descriptor_set::PersistentDescriptorSet,
-    device::{Device, DeviceExtensions, Queue},
-    instance::{Instance, InstanceExtensions, PhysicalDevice},
+    device::{Device, DeviceExtensions, Features, Queue},
+    instance::{Instance, InstanceExtensions, PhysicalDevice, PhysicalDeviceType},
     pipeline::{ComputePipeline, ComputePipelineAbstract},
     sync::{self, GpuFuture},
     Version,
 };
-
-use vulkano::command_buffer::CommandBufferUsage;
 
 mod cs_pressure {
     vulkano_shaders::shader! {
@@ -369,18 +367,30 @@ impl OffscreenRenderer {
         let instance =
             Instance::new(None, Version::V1_1, &InstanceExtensions::none(), None).unwrap();
 
-        let physical = PhysicalDevice::enumerate(&instance).next().unwrap();
-        let queue_family = physical
-            .queue_families()
-            .find(|&q| q.supports_compute())
+        let device_extensions = DeviceExtensions {
+            khr_storage_buffer_storage_class: true,
+            ..DeviceExtensions::none()
+        };
+
+        let (physical_device, queue_family) = PhysicalDevice::enumerate(&instance)
+            .filter_map(|p| {
+                p.queue_families()
+                    .find(|&q| q.supports_compute())
+                    .map(|q| (p, q))
+            })
+            .min_by_key(|(p, _)| match p.properties().device_type.unwrap() {
+                PhysicalDeviceType::DiscreteGpu => 0,
+                PhysicalDeviceType::IntegratedGpu => 1,
+                PhysicalDeviceType::VirtualGpu => 2,
+                PhysicalDeviceType::Cpu => 3,
+                PhysicalDeviceType::Other => 4,
+            })
             .unwrap();
+
         let (device, mut queues) = Device::new(
-            physical,
-            physical.supported_features(),
-            &DeviceExtensions {
-                khr_storage_buffer_storage_class: true,
-                ..DeviceExtensions::none()
-            },
+            physical_device,
+            &Features::none(),
+            &device_extensions,
             [(queue_family, 0.5)].iter().cloned(),
         )
         .unwrap();

@@ -4,7 +4,7 @@
  * Created Date: 29/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 10/07/2021
+ * Last Modified: 21/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -13,19 +13,23 @@
 
 use std::mem::size_of;
 
-use autd3_core::hardware_defined::{RxGlobalControlFlags, RxGlobalHeader};
+use autd3_core::hardware_defined::{
+    DataArray, RxGlobalControlFlags, RxGlobalHeader, NUM_TRANS_IN_UNIT,
+};
 
 use crate::{
     autd_data::{AutdData, Gain, Geometry, Modulation},
-    DelayOffset, SeqFocus, Sequence, Vector3,
+    DelayOffset, GainSequence, PointSequence, SeqFocus, Vector3,
 };
 
 pub struct Parser {
     mod_div: u16,
     mod_buf: Option<Vec<u8>>,
     wavelength: u16,
-    seq_buf: Option<Vec<(Vector3, u8)>>,
-    seq_div: u16,
+    point_seq_buf: Option<Vec<(Vector3, u8)>>,
+    point_seq_div: u16,
+    gain_seq_buf: Option<Vec<Vec<DataArray>>>,
+    gain_seq_div: u16,
 }
 
 impl Parser {
@@ -34,8 +38,10 @@ impl Parser {
             mod_div: 10,
             mod_buf: None,
             wavelength: 8500,
-            seq_buf: None,
-            seq_div: 0,
+            point_seq_buf: None,
+            point_seq_div: 0,
+            gain_seq_buf: None,
+            gain_seq_div: 0,
         }
     }
 
@@ -73,9 +79,15 @@ impl Parser {
             autd3_core::hardware_defined::CommandType::ReadFpgaVerMsb => {
                 res.push(AutdData::RequestFpgaVerMsb)
             }
-            autd3_core::hardware_defined::CommandType::SeqMode => {
-                if let Some(sequence) = self.parse_as_sequence(&raw_buf) {
-                    res.push(AutdData::Sequence(sequence));
+            autd3_core::hardware_defined::CommandType::PointSeqMode => {
+                if let Some(seq) = self.parse_as_point_sequence(&raw_buf) {
+                    res.push(AutdData::PointSequence(seq));
+                    res.push(AutdData::Resume);
+                }
+            }
+            autd3_core::hardware_defined::CommandType::GainSeqMode => {
+                if let Some(seq) = self.parse_as_gain_sequence(&raw_buf) {
+                    res.push(AutdData::GainSequence(seq));
                     res.push(AutdData::Resume);
                 }
             }
@@ -106,7 +118,7 @@ impl Parser {
         res
     }
 
-    fn parse_as_sequence(&mut self, buf: &[u8]) -> Option<Sequence> {
+    fn parse_as_point_sequence(&mut self, buf: &[u8]) -> Option<PointSequence> {
         unsafe {
             let header = buf.as_ptr() as *const RxGlobalHeader;
             let seq_begin = (*header)
@@ -116,8 +128,8 @@ impl Parser {
             let cursor = buf.as_ptr().add(size_of::<RxGlobalHeader>()) as *const u16;
             let seq_size = cursor.read();
             let offset = if seq_begin {
-                self.seq_buf = Some(vec![]);
-                self.seq_div = cursor.add(1).read();
+                self.point_seq_buf = Some(vec![]);
+                self.point_seq_div = cursor.add(1).read();
                 self.wavelength = cursor.add(2).read();
                 5
             } else {
@@ -129,16 +141,54 @@ impl Parser {
                 let y = (*cursor).y(self.wavelength);
                 let z = (*cursor).z(self.wavelength);
                 let duty = (*cursor).amp();
-                if let Some(buf) = &mut self.seq_buf {
+                if let Some(buf) = &mut self.point_seq_buf {
                     buf.push(([x, y, z], duty));
                 }
                 cursor = cursor.add(1);
             }
 
             if seq_end {
-                Some(Sequence {
-                    seq_div: self.seq_div,
-                    seq_data: self.seq_buf.take().unwrap(),
+                Some(PointSequence {
+                    seq_div: self.point_seq_div,
+                    seq_data: self.point_seq_buf.take().unwrap(),
+                })
+            } else {
+                None
+            }
+        }
+    }
+
+    fn parse_as_gain_sequence(&mut self, buf: &[u8]) -> Option<GainSequence> {
+        unsafe {
+            let header = buf.as_ptr() as *const RxGlobalHeader;
+            let seq_begin = (*header)
+                .ctrl_flag
+                .contains(RxGlobalControlFlags::SEQ_BEGIN);
+            let seq_end = (*header).ctrl_flag.contains(RxGlobalControlFlags::SEQ_END);
+            let mut cursor = buf.as_ptr().add(size_of::<RxGlobalHeader>()) as *const u16;
+            if seq_begin {
+                self.gain_seq_buf = Some(vec![]);
+                self.gain_seq_div = cursor.add(1).read();
+                return None;
+            }
+            let dev_num =
+                (buf.len() - size_of::<RxGlobalHeader>()) / (size_of::<u16>() * NUM_TRANS_IN_UNIT);
+
+            let mut d = vec![[0; NUM_TRANS_IN_UNIT]; dev_num];
+            for device in 0..dev_num {
+                for i in 0..NUM_TRANS_IN_UNIT {
+                    d[device][i] = cursor.read();
+                    cursor = cursor.add(1);
+                }
+            }
+            if let Some(b) = &mut self.gain_seq_buf {
+                b.push(d);
+            }
+
+            if seq_end {
+                Some(GainSequence {
+                    seq_div: self.gain_seq_div,
+                    seq_data: self.gain_seq_buf.take().unwrap(),
                 })
             } else {
                 None

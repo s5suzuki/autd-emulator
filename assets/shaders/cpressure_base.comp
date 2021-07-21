@@ -4,7 +4,7 @@
  * Created Date: 10/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 10/07/2021
+ * Last Modified: 21/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -54,7 +54,7 @@ void main() { \
         vec3 tp = vec3(source_pos.pos[idx]); \
         vec3 rv = point - tp; \
         float r = length(rv); \
-        float p = source_phase.phase[idx] - config.wave_num * r; \
+        float p = -source_phase.phase[idx] - config.wave_num * r; \
         float amp = source_amp.amp[idx] / r; \
         re += amp * cos(p); \
         im += amp * sin(p); \

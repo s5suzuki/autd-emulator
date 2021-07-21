@@ -25,7 +25,7 @@ void main() {
         vec3 tp = texture(u_trans_pos, (idx+0.5) / u_trans_num).xyz;
         float d = length(v_gpos - tp);
         vec2 p_amp = texture(u_trans_drive, (idx+0.5) / u_trans_num).xy;
-        float p = 2.0*PI*p_amp.x;
+        float p = -2.0*PI*p_amp.x;
         float amp = p_amp.y / d;
         im += amp * cos(p - u_wavenum*d);
         re += amp * sin(p - u_wavenum*d);
