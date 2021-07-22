@@ -4,7 +4,7 @@
  * Created Date: 06/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 21/07/2021
+ * Last Modified: 22/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -62,6 +62,9 @@ struct App {
     gain_sequence: Option<GainSequence>,
     delay_offset: Option<DelayOffset>,
     log_buf: VecDeque<String>,
+    last_frame_time: std::time::Instant,
+    frame_count: usize,
+    fps: f64,
     #[cfg(feature = "offscreen_renderer")]
     offscreen_render_sys: OffscreenRenderSystem,
 }
@@ -94,6 +97,9 @@ impl App {
             gain_sequence: None,
             delay_offset: None,
             log_buf: VecDeque::new(),
+            last_frame_time: std::time::Instant::now(),
+            frame_count: 0,
+            fps: 0.0,
             #[cfg(feature = "offscreen_renderer")]
             offscreen_render_sys,
         }
@@ -142,6 +148,17 @@ impl App {
             io.update_delta_time(now - last_frame);
             last_frame = now;
             let ui = imgui.frame();
+
+            {
+                self.frame_count += 1;
+                let now = std::time::Instant::now();
+                let duration = now.saturating_duration_since(self.last_frame_time);
+                if duration.as_millis() > 1000 {
+                    self.fps = 1000000.0 / duration.as_micros() as f64 * self.frame_count as f64;
+                    self.last_frame_time = now;
+                    self.frame_count = 0;
+                }
+            }
 
             let mut update_flag = self.handle_autd(&mut autd_server);
             update_flag |= self.update_ui(&ui, &mut render_sys);
@@ -623,6 +640,7 @@ impl App {
                     .build(&ui);
                 });
                 TabItem::new(im_str!("Info")).build(&ui, || {
+                    ui.text(format!("fps: {:.1}", self.fps));
                     ui.text("Control flag");
                     let mut flag = self.ctrl_flag;
                     ui.checkbox_flags(
@@ -920,6 +938,7 @@ pub fn main() {
         "AUTD3 emulator",
         setting.window_width as _,
         setting.window_height as _,
+        setting.viewer_setting.vsync,
     );
 
     let mut app = App::new(setting, &system);

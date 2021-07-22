@@ -4,7 +4,7 @@
  * Created Date: 08/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 09/07/2021
+ * Last Modified: 22/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -44,7 +44,12 @@ pub struct RenderSystem {
 }
 
 impl RenderSystem {
-    pub fn init(imgui: &mut Context, builder: WindowBuilder, events_loop: &EventsLoop) -> Self {
+    pub fn init(
+        imgui: &mut Context,
+        builder: WindowBuilder,
+        events_loop: &EventsLoop,
+        vsync: bool,
+    ) -> Self {
         {
             fn imgui_gamma_to_linear(col: [f32; 4]) -> [f32; 4] {
                 let x = col[0].powf(2.2);
@@ -62,7 +67,7 @@ impl RenderSystem {
 
         let (windowed_context, device, mut factory, output_color, output_stencil) =
             glutin::ContextBuilder::new()
-                .with_vsync(true)
+                .with_vsync(vsync)
                 .with_gfx_color_depth::<ColorFormat, DepthFormat>()
                 .build_windowed(builder, events_loop)
                 .expect("Failed to initialize graphics")

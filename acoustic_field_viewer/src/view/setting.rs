@@ -4,7 +4,7 @@
  * Created Date: 27/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 10/07/2021
+ * Last Modified: 22/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -35,6 +35,7 @@ pub struct ViewerSettings {
     pub near_clip: f32,
     pub far_clip: f32,
     pub background: Vector4,
+    pub vsync: bool,
 }
 
 impl ViewerSettings {
@@ -67,6 +68,7 @@ impl Default for ViewerSettings {
             near_clip: 0.1,
             far_clip: 1000.,
             background: [0.3, 0.3, 0.3, 0.0],
+            vsync: false,
         }
     }
 }
