@@ -800,8 +800,8 @@ impl App {
                                     idx,
                                     self.dev_num,
                                     NUM_TRANS_IN_UNIT - 1,
-                                    seq.seq_data[0][0][0],
-                                    seq.seq_data[0][self.dev_num - 1][NUM_TRANS_IN_UNIT - 1]
+                                    seq.seq_data[idx][0][0],
+                                    seq.seq_data[idx][self.dev_num - 1][NUM_TRANS_IN_UNIT - 1]
                                 ));
                             }
                         }
