@@ -4,7 +4,7 @@
  * Created Date: 06/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 21/07/2021
+ * Last Modified: 22/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -28,13 +28,11 @@ use acoustic_field_viewer::{
         render_system::RenderSystem, AcousticFiledSliceViewer, SoundSourceViewer, System,
         UpdateFlag,
     },
-    Matrix4,
+    Matrix4, Vector3,
 };
-use autd3_core::hardware_defined::{
-    RxGlobalControlFlags, MOD_SAMPLING_FREQ_BASE, NUM_TRANS_IN_UNIT, SEQ_BASE_FREQ,
-};
+use autd3_core::hardware_defined::{RxGlobalControlFlags, MOD_SAMPLING_FREQ_BASE, SEQ_BASE_FREQ};
 use autd3_emulator_server::{
-    AutdData, AutdServer, DelayOffset, GainSequence, Modulation, PointSequence,
+    AutdData, AutdServer, DelayOffset, Gain, GainSequence, Modulation, PointSequence,
 };
 use gfx::Device;
 use glutin::{
@@ -60,8 +58,13 @@ struct App {
     modulation: Option<Modulation>,
     point_sequence: Option<PointSequence>,
     gain_sequence: Option<GainSequence>,
+    seq_idx: i32,
+    seq_wavelength: f32,
     delay_offset: Option<DelayOffset>,
     log_buf: VecDeque<String>,
+    last_frame_time: std::time::Instant,
+    frame_count: usize,
+    fps: f64,
     #[cfg(feature = "offscreen_renderer")]
     offscreen_render_sys: OffscreenRenderSystem,
 }
@@ -92,8 +95,13 @@ impl App {
             modulation: None,
             point_sequence: None,
             gain_sequence: None,
+            seq_idx: 0,
+            seq_wavelength: 8.5,
             delay_offset: None,
             log_buf: VecDeque::new(),
+            last_frame_time: std::time::Instant::now(),
+            frame_count: 0,
+            fps: 0.0,
             #[cfg(feature = "offscreen_renderer")]
             offscreen_render_sys,
         }
@@ -142,6 +150,17 @@ impl App {
             io.update_delta_time(now - last_frame);
             last_frame = now;
             let ui = imgui.frame();
+
+            {
+                self.frame_count += 1;
+                let now = std::time::Instant::now();
+                let duration = now.saturating_duration_since(self.last_frame_time);
+                if duration.as_millis() > 1000 {
+                    self.fps = 1000000.0 / duration.as_micros() as f64 * self.frame_count as f64;
+                    self.last_frame_time = now;
+                    self.frame_count = 0;
+                }
+            }
 
             let mut update_flag = self.handle_autd(&mut autd_server);
             update_flag |= self.update_ui(&ui, &mut render_sys);
@@ -217,15 +236,7 @@ impl App {
                         update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
                     }
                     AutdData::Gain(gain) => {
-                        for ((&phase, &amp), source) in gain
-                            .phases
-                            .iter()
-                            .zip(gain.amps.iter())
-                            .zip(self.sources.iter_mut())
-                        {
-                            source.amp = (amp as f32 / 510.0 * std::f32::consts::PI).sin();
-                            source.phase = 2.0 * PI * (1.0 - (phase as f32 / 255.0));
-                        }
+                        self.set_gain(&gain);
                         self.log("gain");
                         update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
                     }
@@ -278,14 +289,21 @@ impl App {
                         self.log("req cpu ver lsb");
                     }
                     AutdData::PointSequence(seq) => {
+                        let (focus, duty) = seq.seq_data[0];
+                        self.seq_wavelength = seq.wavelength as f32 / 1000.0;
                         self.point_sequence = Some(seq);
                         self.gain_sequence = None;
-                        self.log("receive point sequence");
+                        self.seq_idx = 0;
+                        self.calc_focus(duty, focus);
+                        update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
                     }
                     AutdData::GainSequence(seq) => {
                         self.point_sequence = None;
+                        self.set_gain(&seq.seq_data[0]);
                         self.gain_sequence = Some(seq);
+                        self.seq_idx = 0;
                         self.log("receive gain sequence");
+                        update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
                     }
                     AutdData::DelayOffset(d) => {
                         self.delay_offset = Some(d);
@@ -623,36 +641,7 @@ impl App {
                     .build(&ui);
                 });
                 TabItem::new(im_str!("Info")).build(&ui, || {
-                    ui.text("Control flag");
-                    let mut flag = self.ctrl_flag;
-                    ui.checkbox_flags(
-                        im_str!("MOD BEGIN"),
-                        &mut flag,
-                        RxGlobalControlFlags::MOD_BEGIN,
-                    );
-                    ui.checkbox_flags(im_str!("MOD END"), &mut flag, RxGlobalControlFlags::MOD_END);
-                    ui.checkbox_flags(
-                        im_str!("MOD END"),
-                        &mut flag,
-                        RxGlobalControlFlags::READ_FPGA_INFO,
-                    );
-                    ui.checkbox_flags(im_str!("SILENT"), &mut flag, RxGlobalControlFlags::SILENT);
-                    ui.checkbox_flags(
-                        im_str!("FORCE FAN"),
-                        &mut flag,
-                        RxGlobalControlFlags::FORCE_FAN,
-                    );
-                    ui.checkbox_flags(
-                        im_str!("SEQ MODE"),
-                        &mut flag,
-                        RxGlobalControlFlags::SEQ_MODE,
-                    );
-                    ui.checkbox_flags(
-                        im_str!("SEQ BEGIN"),
-                        &mut flag,
-                        RxGlobalControlFlags::SEQ_BEGIN,
-                    );
-                    ui.checkbox_flags(im_str!("SEQ END"), &mut flag, RxGlobalControlFlags::SEQ_END);
+                    ui.text(format!("fps: {:.1}", self.fps));
 
                     if let Some(m) = &self.modulation {
                         ui.separator();
@@ -686,7 +675,6 @@ impl App {
                         }
 
                         if self.setting.show_mod_plot {
-                            ui.separator();
                             let mod_v = self.mod_values(|&v| ((v as f32) / 512.0 * PI).sin());
                             PlotLines::new(ui, im_str!("mod plot"), &mod_v)
                                 .graph_size(self.setting.mod_plot_size)
@@ -723,29 +711,26 @@ impl App {
                                 "Sequence period: {} [us]",
                                 smpl_period * seq.seq_data.len()
                             ));
-                            if !seq.seq_data.is_empty() {
-                                ui.text(format!(
-                                    "seq[0]: {:?} / {}",
-                                    seq.seq_data[0].0, seq.seq_data[0].1
-                                ));
+                            if ui
+                                .input_int(im_str!("Sequence idx"), &mut self.seq_idx)
+                                .build()
+                            {
+                                if self.seq_idx >= seq.seq_data.len() as _ {
+                                    self.seq_idx = 0;
+                                }
+                                if self.seq_idx < 0 {
+                                    self.seq_idx = seq.seq_data.len() as i32 - 1;
+                                }
+                                let (focus, duty) = seq.seq_data[self.seq_idx as usize];
+                                self.calc_focus(duty, focus);
+                                update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
                             }
-                            if seq.seq_data.len() == 2 || seq.seq_data.len() == 3 {
-                                ui.text(format!(
-                                    "seq[1]: {:?} / {}",
-                                    seq.seq_data[1].0, seq.seq_data[1].1
-                                ));
-                            } else if seq.seq_data.len() > 3 {
-                                ui.text("...");
-                            }
-                            if seq.seq_data.len() >= 3 {
-                                let idx = seq.seq_data.len() - 1;
-                                ui.text(format!(
-                                    "seq[{}]: {:?} / {}",
-                                    idx, seq.seq_data[idx].0, seq.seq_data[idx].1
-                                ));
-                            }
+                            ui.text(format!(
+                                "time: {} [us]",
+                                smpl_period * self.seq_idx as usize
+                            ));
                         }
-                        if let Some(seq) = &self.gain_sequence {
+                        if let Some(seq) = self.gain_sequence.take() {
                             ui.text("GainSequence mode");
                             ui.text(format!("Sequence size: {}", seq.seq_data.len()));
                             ui.text(format!("Sequence division: {}", seq.seq_div));
@@ -755,37 +740,25 @@ impl App {
                                 "Sequence period: {} [us]",
                                 smpl_period * seq.seq_data.len()
                             ));
-                            if !seq.seq_data.is_empty() {
-                                ui.text(format!(
-                                    "seq[0][0][0]...seq[0][{}][{}]: {:x}...{:x}",
-                                    self.dev_num,
-                                    NUM_TRANS_IN_UNIT - 1,
-                                    seq.seq_data[0][0][0],
-                                    seq.seq_data[0][self.dev_num - 1][NUM_TRANS_IN_UNIT - 1]
-                                ));
+                            if ui
+                                .input_int(im_str!("Sequence idx"), &mut self.seq_idx)
+                                .build()
+                            {
+                                if self.seq_idx >= seq.seq_data.len() as _ {
+                                    self.seq_idx = 0;
+                                }
+                                if self.seq_idx < 0 {
+                                    self.seq_idx = seq.seq_data.len() as i32 - 1;
+                                }
+                                let idx = self.seq_idx as usize;
+                                self.set_gain(&seq.seq_data[idx as usize]);
+                                update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
                             }
-                            if seq.seq_data.len() == 2 || seq.seq_data.len() == 3 {
-                                ui.text(format!(
-                                    "seq[1][0][0]...seq[1][{}][{}]: {:x}...{:x}",
-                                    self.dev_num,
-                                    NUM_TRANS_IN_UNIT - 1,
-                                    seq.seq_data[1][0][0],
-                                    seq.seq_data[1][self.dev_num - 1][NUM_TRANS_IN_UNIT - 1]
-                                ));
-                            } else if seq.seq_data.len() > 3 {
-                                ui.text("...");
-                            }
-                            if seq.seq_data.len() >= 3 {
-                                let idx = seq.seq_data.len() - 1;
-                                ui.text(format!(
-                                    "seq[{0}][0][0]...seq[{0}][{1}][{2}]: {3:x}...{4:x}",
-                                    idx,
-                                    self.dev_num,
-                                    NUM_TRANS_IN_UNIT - 1,
-                                    seq.seq_data[0][0][0],
-                                    seq.seq_data[0][self.dev_num - 1][NUM_TRANS_IN_UNIT - 1]
-                                ));
-                            }
+                            ui.text(format!(
+                                "time: {} [us]",
+                                smpl_period * self.seq_idx as usize
+                            ));
+                            self.gain_sequence = Some(seq);
                         }
                     }
 
@@ -803,6 +776,38 @@ impl App {
                             idx, d.delay_offset[idx].1, d.delay_offset[idx].0
                         ));
                     }
+
+                    ui.separator();
+                    ui.text("Control flag");
+                    let mut flag = self.ctrl_flag;
+                    ui.checkbox_flags(
+                        im_str!("MOD BEGIN"),
+                        &mut flag,
+                        RxGlobalControlFlags::MOD_BEGIN,
+                    );
+                    ui.checkbox_flags(im_str!("MOD END"), &mut flag, RxGlobalControlFlags::MOD_END);
+                    ui.checkbox_flags(
+                        im_str!("MOD END"),
+                        &mut flag,
+                        RxGlobalControlFlags::READ_FPGA_INFO,
+                    );
+                    ui.checkbox_flags(im_str!("SILENT"), &mut flag, RxGlobalControlFlags::SILENT);
+                    ui.checkbox_flags(
+                        im_str!("FORCE FAN"),
+                        &mut flag,
+                        RxGlobalControlFlags::FORCE_FAN,
+                    );
+                    ui.checkbox_flags(
+                        im_str!("SEQ MODE"),
+                        &mut flag,
+                        RxGlobalControlFlags::SEQ_MODE,
+                    );
+                    ui.checkbox_flags(
+                        im_str!("SEQ BEGIN"),
+                        &mut flag,
+                        RxGlobalControlFlags::SEQ_BEGIN,
+                    );
+                    ui.checkbox_flags(im_str!("SEQ END"), &mut flag, RxGlobalControlFlags::SEQ_END);
                 });
                 TabItem::new(im_str!("Log")).build(&ui, || {
                     if ui.radio_button_bool(im_str!("enable"), self.setting.log_enable) {
@@ -892,6 +897,27 @@ impl App {
         }
     }
 
+    fn set_gain(&mut self, gain: &Gain) {
+        for ((&phase, &amp), source) in gain
+            .phases
+            .iter()
+            .zip(gain.amps.iter())
+            .zip(self.sources.iter_mut())
+        {
+            source.amp = (amp as f32 / 510.0 * std::f32::consts::PI).sin();
+            source.phase = 2.0 * PI * (1.0 - (phase as f32 / 255.0));
+        }
+    }
+
+    fn calc_focus(&mut self, duty: u8, focus: Vector3) {
+        for source in self.sources.iter_mut() {
+            source.amp = (duty as f32 / 510.0 * std::f32::consts::PI).sin();
+            let dist = vecmath_util::dist(source.pos, focus);
+            let phase = (dist / self.seq_wavelength) % 1.0;
+            source.phase = 2.0 * PI * (1.0 - phase);
+        }
+    }
+
     // TODO: This log system is not so efficient
     fn log(&mut self, msg: &str) {
         if self.setting.log_enable {
@@ -920,6 +946,7 @@ pub fn main() {
         "AUTD3 emulator",
         setting.window_width as _,
         setting.window_height as _,
+        setting.viewer_setting.vsync,
     );
 
     let mut app = App::new(setting, &system);

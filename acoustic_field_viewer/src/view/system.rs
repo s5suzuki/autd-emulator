@@ -4,7 +4,7 @@
  * Created Date: 08/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 10/07/2021
+ * Last Modified: 22/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -32,7 +32,7 @@ pub struct System {
 }
 
 impl System {
-    pub fn init(title: &str, width: f64, heigh: f64) -> Self {
+    pub fn init(title: &str, width: f64, heigh: f64, vsync: bool) -> Self {
         let events_loop = EventsLoop::new();
         let builder = WindowBuilder::new()
             .with_title(title.to_owned())
@@ -56,7 +56,7 @@ impl System {
 
         imgui.io_mut().font_global_scale = (1.0 / hidpi_factor) as f32;
 
-        let mut render_sys = RenderSystem::init(&mut imgui, builder, &events_loop);
+        let mut render_sys = RenderSystem::init(&mut imgui, builder, &events_loop, vsync);
         platform.attach_window(imgui.io_mut(), render_sys.window(), HiDpiMode::Default);
         let encoder: gfx::Encoder<_, _> = render_sys.factory.create_command_buffer().into();
         System {

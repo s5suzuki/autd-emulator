@@ -102,7 +102,7 @@ dependencies = [
 
 [[package]]
 name = "autd-emulator"
-version = "0.3.2"
+version = "0.4.0"
 dependencies = [
  "acoustic_field_viewer",
  "autd3-core",
@@ -154,7 +154,7 @@ dependencies = [
 
 [[package]]
 name = "autd3_emulator_server"
-version = "0.2.1"
+version = "0.4.0"
 dependencies = [
  "acoustic_field_viewer",
  "autd3-core",

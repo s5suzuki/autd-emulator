@@ -4,7 +4,7 @@
  * Created Date: 29/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 21/07/2021
+ * Last Modified: 22/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -13,9 +13,7 @@
 
 use std::mem::size_of;
 
-use autd3_core::hardware_defined::{
-    DataArray, RxGlobalControlFlags, RxGlobalHeader, NUM_TRANS_IN_UNIT,
-};
+use autd3_core::hardware_defined::{RxGlobalControlFlags, RxGlobalHeader};
 
 use crate::{
     autd_data::{AutdData, Gain, Geometry, Modulation},
@@ -28,7 +26,7 @@ pub struct Parser {
     wavelength: u16,
     point_seq_buf: Option<Vec<(Vector3, u8)>>,
     point_seq_div: u16,
-    gain_seq_buf: Option<Vec<Vec<DataArray>>>,
+    gain_seq_buf: Option<Vec<Gain>>,
     gain_seq_div: u16,
 }
 
@@ -151,6 +149,7 @@ impl Parser {
                 Some(PointSequence {
                     seq_div: self.point_seq_div,
                     seq_data: self.point_seq_buf.take().unwrap(),
+                    wavelength: self.wavelength,
                 })
             } else {
                 None
@@ -165,24 +164,16 @@ impl Parser {
                 .ctrl_flag
                 .contains(RxGlobalControlFlags::SEQ_BEGIN);
             let seq_end = (*header).ctrl_flag.contains(RxGlobalControlFlags::SEQ_END);
-            let mut cursor = buf.as_ptr().add(size_of::<RxGlobalHeader>()) as *const u16;
             if seq_begin {
                 self.gain_seq_buf = Some(vec![]);
-                self.gain_seq_div = cursor.add(1).read();
+                self.gain_seq_div = (buf.as_ptr().add(size_of::<RxGlobalHeader>()) as *const u16)
+                    .add(1)
+                    .read();
                 return None;
             }
-            let dev_num =
-                (buf.len() - size_of::<RxGlobalHeader>()) / (size_of::<u16>() * NUM_TRANS_IN_UNIT);
 
-            let mut d = vec![[0; NUM_TRANS_IN_UNIT]; dev_num];
-            for device in 0..dev_num {
-                for i in 0..NUM_TRANS_IN_UNIT {
-                    d[device][i] = cursor.read();
-                    cursor = cursor.add(1);
-                }
-            }
             if let Some(b) = &mut self.gain_seq_buf {
-                b.push(d);
+                b.push(Self::parse_as_gain(&buf[size_of::<RxGlobalHeader>()..]));
             }
 
             if seq_end {
