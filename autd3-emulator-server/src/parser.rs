@@ -4,7 +4,7 @@
  * Created Date: 29/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 21/07/2021
+ * Last Modified: 22/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -175,9 +175,9 @@ impl Parser {
                 (buf.len() - size_of::<RxGlobalHeader>()) / (size_of::<u16>() * NUM_TRANS_IN_UNIT);
 
             let mut d = vec![[0; NUM_TRANS_IN_UNIT]; dev_num];
-            for device in 0..dev_num {
-                for i in 0..NUM_TRANS_IN_UNIT {
-                    d[device][i] = cursor.read();
+            for device in d.iter_mut() {
+                for trans in device.iter_mut() {
+                    *trans = cursor.read();
                     cursor = cursor.add(1);
                 }
             }

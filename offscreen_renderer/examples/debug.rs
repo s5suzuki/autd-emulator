@@ -4,7 +4,7 @@
  * Created Date: 10/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 10/07/2021
+ * Last Modified: 22/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -34,7 +34,7 @@ fn main() {
 
     let opengl = shader_version::OpenGL::V4_5;
     let settings = ViewerSettings::default();
-    let system = System::init("debug", 960., 640.);
+    let system = System::init("debug", 960., 640., false);
     let mut field_slice_viewer =
         AcousticFiledSliceViewer::new(&system.render_sys, opengl, &settings);
     field_slice_viewer.move_to(settings.slice_pos);
