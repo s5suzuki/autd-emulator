@@ -1,11 +1,11 @@
 [package]
 name = "autd3_emulator_server"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 acoustic_field_viewer = {path="../acoustic_field_viewer"}
-autd3-core = "1.6.0"
+autd3-core = "1.7.0"
 vecmath = "1.0.0"

@@ -4,7 +4,7 @@
  * Created Date: 06/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 22/07/2021
+ * Last Modified: 28/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -732,6 +732,17 @@ impl App {
                         }
                         if let Some(seq) = self.gain_sequence.take() {
                             ui.text("GainSequence mode");
+                            ui.text(format!(
+                                "Gain mode: {}",
+                                match seq.gain_mode {
+                                    autd3_core::hardware_defined::GainMode::DutyPhaseFull =>
+                                        "DutyPhaseFull",
+                                    autd3_core::hardware_defined::GainMode::PhaseFull =>
+                                        "PhaseFull",
+                                    autd3_core::hardware_defined::GainMode::PhaseHalf =>
+                                        "PhaseHalf",
+                                }
+                            ));
                             ui.text(format!("Sequence size: {}", seq.seq_data.len()));
                             ui.text(format!("Sequence division: {}", seq.seq_div));
                             let smpl_period = (1000000 / SEQ_BASE_FREQ) * seq.seq_div as usize;

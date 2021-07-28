@@ -4,16 +4,16 @@
  * Created Date: 29/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 22/07/2021
+ * Last Modified: 28/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
  *
  */
 
-use std::mem::size_of;
+use std::{mem::size_of, vec};
 
-use autd3_core::hardware_defined::{RxGlobalControlFlags, RxGlobalHeader};
+use autd3_core::hardware_defined::{GainMode, RxGlobalControlFlags, RxGlobalHeader};
 
 use crate::{
     autd_data::{AutdData, Gain, Geometry, Modulation},
@@ -28,6 +28,8 @@ pub struct Parser {
     point_seq_div: u16,
     gain_seq_buf: Option<Vec<Gain>>,
     gain_seq_div: u16,
+    seq_gain_mode: GainMode,
+    gain_seq_size: usize,
 }
 
 impl Parser {
@@ -40,6 +42,8 @@ impl Parser {
             point_seq_div: 0,
             gain_seq_buf: None,
             gain_seq_div: 0,
+            seq_gain_mode: GainMode::DutyPhaseFull,
+            gain_seq_size: 0,
         }
     }
 
@@ -61,8 +65,14 @@ impl Parser {
                 }
 
                 if raw_buf.len() > size_of::<RxGlobalHeader>() {
-                    let gain = Self::parse_as_gain(&raw_buf[size_of::<RxGlobalHeader>()..]);
-                    res.push(AutdData::Gain(gain));
+                    let gain = Self::parse_as_gain(
+                        &raw_buf[size_of::<RxGlobalHeader>()..],
+                        GainMode::DutyPhaseFull,
+                    );
+
+                    for g in gain {
+                        res.push(AutdData::Gain(g));
+                    }
                 }
             }
             autd3_core::hardware_defined::CommandType::ReadCpuVerLsb => {
@@ -164,20 +174,39 @@ impl Parser {
                 .ctrl_flag
                 .contains(RxGlobalControlFlags::SEQ_BEGIN);
             let seq_end = (*header).ctrl_flag.contains(RxGlobalControlFlags::SEQ_END);
+            let cursor = buf.as_ptr().add(size_of::<RxGlobalHeader>()) as *const u16;
             if seq_begin {
                 self.gain_seq_buf = Some(vec![]);
-                self.gain_seq_div = (buf.as_ptr().add(size_of::<RxGlobalHeader>()) as *const u16)
-                    .add(1)
-                    .read();
+                self.seq_gain_mode = match cursor.read() {
+                    1 => GainMode::DutyPhaseFull,
+                    2 => GainMode::PhaseFull,
+                    4 => GainMode::PhaseHalf,
+                    _ => GainMode::DutyPhaseFull,
+                };
+                self.gain_seq_div = cursor.add(1).read();
+                self.gain_seq_size = cursor.add(2).read() as _;
                 return None;
             }
 
             if let Some(b) = &mut self.gain_seq_buf {
-                b.push(Self::parse_as_gain(&buf[size_of::<RxGlobalHeader>()..]));
+                b.append(&mut Self::parse_as_gain(
+                    &buf[size_of::<RxGlobalHeader>()..],
+                    self.seq_gain_mode,
+                ))
             }
 
             if seq_end {
+                if let Some(b) = &mut self.gain_seq_buf {
+                    b.resize(
+                        self.gain_seq_size,
+                        Gain {
+                            amps: vec![],
+                            phases: vec![],
+                        },
+                    );
+                }
                 Some(GainSequence {
+                    gain_mode: self.seq_gain_mode,
                     seq_div: self.gain_seq_div,
                     seq_data: self.gain_seq_buf.take().unwrap(),
                 })
@@ -216,14 +245,74 @@ impl Parser {
         }
     }
 
-    fn parse_as_gain(buf: &[u8]) -> Gain {
-        let mut amps = Vec::with_capacity(buf.len() / 2);
-        let mut phases = Vec::with_capacity(buf.len() / 2);
-        for amp_phase in buf.chunks_exact(2) {
-            phases.push(amp_phase[0]);
-            amps.push(amp_phase[1]);
+    fn parse_as_gain(buf: &[u8], gain_mode: GainMode) -> Vec<Gain> {
+        match gain_mode {
+            GainMode::DutyPhaseFull => {
+                let mut amps = Vec::with_capacity(buf.len() / 2);
+                let mut phases = Vec::with_capacity(buf.len() / 2);
+                for amp_phase in buf.chunks_exact(2) {
+                    phases.push(amp_phase[0]);
+                    amps.push(amp_phase[1]);
+                }
+                vec![Gain { amps, phases }]
+            }
+            GainMode::PhaseFull => {
+                let mut phases1 = Vec::with_capacity(buf.len() / 2);
+                let mut phases2 = Vec::with_capacity(buf.len() / 2);
+                for phase in buf.chunks_exact(2) {
+                    phases1.push(phase[0]);
+                    phases2.push(phase[1]);
+                }
+                vec![
+                    Gain {
+                        amps: vec![0xFF; buf.len() / 2],
+                        phases: phases1,
+                    },
+                    Gain {
+                        amps: vec![0xFF; buf.len() / 2],
+                        phases: phases2,
+                    },
+                ]
+            }
+            GainMode::PhaseHalf => {
+                let mut phases1 = Vec::with_capacity(buf.len() / 2);
+                let mut phases2 = Vec::with_capacity(buf.len() / 2);
+                let mut phases3 = Vec::with_capacity(buf.len() / 2);
+                let mut phases4 = Vec::with_capacity(buf.len() / 2);
+                for phase in buf.chunks_exact(2) {
+                    let p = phase[0] & 0x0F;
+                    let p = p << 4 | p;
+                    phases1.push(p);
+                    let p = phase[0] & 0xF0;
+                    let p = p | p >> 4;
+                    phases2.push(p);
+                    let p = phase[1] & 0x0F;
+                    let p = p << 4 | p;
+                    phases3.push(p);
+                    let p = phase[1] & 0xF0;
+                    let p = p | p >> 4;
+                    phases4.push(p);
+                }
+                vec![
+                    Gain {
+                        amps: vec![0xFF; buf.len() / 2],
+                        phases: phases1,
+                    },
+                    Gain {
+                        amps: vec![0xFF; buf.len() / 2],
+                        phases: phases2,
+                    },
+                    Gain {
+                        amps: vec![0xFF; buf.len() / 2],
+                        phases: phases3,
+                    },
+                    Gain {
+                        amps: vec![0xFF; buf.len() / 2],
+                        phases: phases4,
+                    },
+                ]
+            }
         }
-        Gain { amps, phases }
     }
 
     fn parse_as_delay_enable(buf: &[u8]) -> DelayOffset {

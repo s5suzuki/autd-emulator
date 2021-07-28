@@ -4,7 +4,7 @@
  * Created Date: 07/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 22/07/2021
+ * Last Modified: 28/07/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -13,7 +13,7 @@
 
 use acoustic_field_viewer::sound_source::SoundSource;
 use autd3_core::hardware_defined::{
-    RxGlobalControlFlags, NUM_TRANS_X, NUM_TRANS_Y, TRANS_SPACING_MM,
+    GainMode, RxGlobalControlFlags, NUM_TRANS_X, NUM_TRANS_Y, TRANS_SPACING_MM,
 };
 
 use crate::Vector3;
@@ -25,7 +25,7 @@ pub struct Modulation {
     pub mod_div: u16,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Gain {
     pub amps: Vec<u8>,
     pub phases: Vec<u8>,
@@ -78,6 +78,7 @@ pub struct PointSequence {
 
 #[derive(Debug)]
 pub struct GainSequence {
+    pub gain_mode: GainMode,
     pub seq_div: u16,
     pub seq_data: Vec<Gain>,
 }
