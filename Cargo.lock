@@ -102,7 +102,7 @@ dependencies = [
 
 [[package]]
 name = "autd-emulator"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "acoustic_field_viewer",
  "autd3-core",
@@ -131,9 +131,9 @@ dependencies = [
 
 [[package]]
 name = "autd3-core"
-version = "1.6.0"
+version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4fcad5a764f24ff2e6c206de6df7a8e301d3f3b99176ea878453144674b27f68"
+checksum = "1e194aacc39a425220c464fa1f200c0bbf301326edb8c95e59314531cefb0619"
 dependencies = [
  "anyhow",
  "autd3-traits",
@@ -154,7 +154,7 @@ dependencies = [
 
 [[package]]
 name = "autd3_emulator_server"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "acoustic_field_viewer",
  "autd3-core",
@@ -193,9 +193,9 @@ dependencies = [
 
 [[package]]
 name = "bytemuck"
-version = "1.7.0"
+version = "1.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9966d2ab714d0f785dbac0a0396251a35280aeb42413281617d0209ab4898435"
+checksum = "72957246c41db82b8ef88a5486143830adeb8227ef9837740bdec67724cf2c5b"
 
 [[package]]
 name = "byteorder"
@@ -1612,9 +1612,9 @@ dependencies = [
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.27"
+version = "1.0.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0d8caf72986c1a598726adc988bb5984792ef84f5ee5aa50209145ee8077038"
+checksum = "5c7ed8b8c7b886ea3ed7dde405212185f423ab44682667c8c6dd14aa1d9f6612"
 dependencies = [
  "unicode-xid",
 ]
@@ -1957,9 +1957,9 @@ checksum = "6446ced80d6c486436db5c078dde11a9f73d42b57fb273121e160b84f63d894c"
 
 [[package]]
 name = "syn"
-version = "1.0.73"
+version = "1.0.74"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f71489ff30030d2ae598524f61326b902466f72a0fb1a8564c001cc63425bcc7"
+checksum = "1873d832550d4588c3dbc20f01361ab00bfe741048f71e3fecf145a7cc18b29c"
 dependencies = [
  "proc-macro2",
  "quote",
