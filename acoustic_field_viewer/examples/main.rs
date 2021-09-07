@@ -4,7 +4,7 @@
  * Created Date: 27/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 22/07/2021
+ * Last Modified: 07/09/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -15,7 +15,7 @@ use std::{f32::consts::PI, time::Instant};
 
 use acoustic_field_viewer::{
     camera_helper,
-    sound_source::SoundSource,
+    sound_source::{SoundSource, SourceFlag},
     view::{
         render_system::RenderSystem, AcousticFiledSliceViewer, SoundSourceViewer, System,
         UpdateFlag, ViewerSettings,
@@ -304,6 +304,26 @@ impl App {
             });
         });
 
+        if ui.small_button(im_str!("toggle source hidden")) {
+            for source in self.sources.iter_mut() {
+                source.flag.set(
+                    SourceFlag::HIDDEN,
+                    !source.flag.contains(SourceFlag::HIDDEN),
+                );
+            }
+            update_flag |= UpdateFlag::UPDATE_SOURCE_FLAG;
+        }
+        ui.same_line(0.);
+        if ui.small_button(im_str!("toggle source enable")) {
+            for source in self.sources.iter_mut() {
+                source.flag.set(
+                    SourceFlag::DISABLE,
+                    !source.flag.contains(SourceFlag::DISABLE),
+                );
+            }
+            update_flag |= UpdateFlag::UPDATE_SOURCE_FLAG;
+        }
+
         ui.separator();
         if ui.small_button(im_str!("auto")) {
             let rot = quaternion::euler_angles(
@@ -425,7 +445,7 @@ impl App {
             let pos = source.pos;
             let d = vecmath_util::dist(pos, focal_pos);
             let phase = (d % settings.wave_length) / settings.wave_length;
-            source.phase = 2.0 * PI * phase;
+            source.phase = 2.0 * PI * (1.0 - phase);
         }
     }
 }

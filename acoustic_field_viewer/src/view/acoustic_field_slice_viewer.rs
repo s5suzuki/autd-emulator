@@ -4,7 +4,7 @@
  * Created Date: 27/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 11/07/2021
+ * Last Modified: 07/09/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -29,7 +29,7 @@ use scarlet::{color::RGBColor, colormap::ColorMap};
 use shader_version::{glsl::GLSL, OpenGL, Shaders};
 
 use crate::{
-    sound_source::SoundSource,
+    sound_source::{SoundSource, SourceFlag},
     view::{render_system, render_system::RenderSystem, UpdateFlag, ViewerSettings},
     Matrix4, Vector3, Vector4,
 };
@@ -141,7 +141,9 @@ impl AcousticFiledSliceViewer {
             self.slice = slice;
         }
 
-        if update_flag.contains(UpdateFlag::UPDATE_SOURCE_DRIVE) {
+        if update_flag.contains(UpdateFlag::UPDATE_SOURCE_DRIVE)
+            || update_flag.contains(UpdateFlag::UPDATE_SOURCE_FLAG)
+        {
             AcousticFiledSliceViewer::update_drive_texture(
                 &mut self.pipe_data,
                 &mut renderer_sys.factory,
@@ -213,7 +215,11 @@ impl AcousticFiledSliceViewer {
         for source in sources {
             texels.push([
                 (source.phase / (2.0 * std::f32::consts::PI) * 255.) as u8,
-                (source.amp * 255.0) as u8,
+                if source.flag.contains(SourceFlag::DISABLE) {
+                    0u8
+                } else {
+                    (source.amp * 255.0) as u8
+                },
                 0x00,
                 0x00,
             ]);

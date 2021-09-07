@@ -4,7 +4,7 @@
  * Created Date: 10/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 21/07/2021
+ * Last Modified: 07/09/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -22,9 +22,12 @@ use scarlet::prelude::RGBColor;
 use vulkano::{
     buffer::{BufferUsage, CpuAccessibleBuffer},
     command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage},
-    descriptor::descriptor_set::PersistentDescriptorSet,
-    device::{Device, DeviceExtensions, Features, Queue},
-    instance::{Instance, InstanceExtensions, PhysicalDevice, PhysicalDeviceType},
+    descriptor_set::PersistentDescriptorSet,
+    device::{
+        physical::{PhysicalDevice, PhysicalDeviceType},
+        Device, DeviceExtensions, Features, Queue,
+    },
+    instance::{Instance, InstanceExtensions},
     pipeline::{ComputePipeline, ComputePipelineAbstract},
     sync::{self, GpuFuture},
     Version,
@@ -260,55 +263,45 @@ impl OffscreenRenderer {
         let source_phase_buffer = self.source_phase_buf.clone().unwrap();
 
         let set_0 = Arc::new(
-            PersistentDescriptorSet::start(
-                pipeline.layout().descriptor_set_layout(0).unwrap().clone(),
-            )
-            .add_buffer(res_buffer)
-            .unwrap()
-            .build()
-            .unwrap(),
+            PersistentDescriptorSet::start(pipeline.layout().descriptor_set_layouts()[0].clone())
+                .add_buffer(res_buffer)
+                .unwrap()
+                .build()
+                .unwrap(),
         );
 
         let set_1 = Arc::new(
-            PersistentDescriptorSet::start(
-                pipeline.layout().descriptor_set_layout(1).unwrap().clone(),
-            )
-            .add_buffer(config_buffer)
-            .unwrap()
-            .build()
-            .unwrap(),
+            PersistentDescriptorSet::start(pipeline.layout().descriptor_set_layouts()[1].clone())
+                .add_buffer(config_buffer)
+                .unwrap()
+                .build()
+                .unwrap(),
         );
 
         let set_2 = Arc::new(
-            PersistentDescriptorSet::start(
-                pipeline.layout().descriptor_set_layout(2).unwrap().clone(),
-            )
-            .add_buffer(source_pos_buffer)
-            .unwrap()
-            .build()
-            .unwrap(),
+            PersistentDescriptorSet::start(pipeline.layout().descriptor_set_layouts()[2].clone())
+                .add_buffer(source_pos_buffer)
+                .unwrap()
+                .build()
+                .unwrap(),
         );
 
         let set_3 = Arc::new(
-            PersistentDescriptorSet::start(
-                pipeline.layout().descriptor_set_layout(3).unwrap().clone(),
-            )
-            .add_buffer(source_phase_buffer)
-            .unwrap()
-            .add_buffer(source_amp_buffer)
-            .unwrap()
-            .build()
-            .unwrap(),
+            PersistentDescriptorSet::start(pipeline.layout().descriptor_set_layouts()[3].clone())
+                .add_buffer(source_phase_buffer)
+                .unwrap()
+                .add_buffer(source_amp_buffer)
+                .unwrap()
+                .build()
+                .unwrap(),
         );
 
         let set_4 = Arc::new(
-            PersistentDescriptorSet::start(
-                pipeline.layout().descriptor_set_layout(4).unwrap().clone(),
-            )
-            .add_buffer(points_buffer)
-            .unwrap()
-            .build()
-            .unwrap(),
+            PersistentDescriptorSet::start(pipeline.layout().descriptor_set_layouts()[4].clone())
+                .add_buffer(points_buffer)
+                .unwrap()
+                .build()
+                .unwrap(),
         );
 
         let mut builder = AutoCommandBufferBuilder::primary(
@@ -323,7 +316,6 @@ impl OffscreenRenderer {
                 pipeline,
                 (set_0, set_1, set_2, set_3, set_4),
                 (),
-                vec![],
             )
             .unwrap();
         let command_buffer = builder.build().unwrap();
@@ -378,7 +370,7 @@ impl OffscreenRenderer {
                     .find(|&q| q.supports_compute())
                     .map(|q| (p, q))
             })
-            .min_by_key(|(p, _)| match p.properties().device_type.unwrap() {
+            .min_by_key(|(p, _)| match p.properties().device_type {
                 PhysicalDeviceType::DiscreteGpu => 0,
                 PhysicalDeviceType::IntegratedGpu => 1,
                 PhysicalDeviceType::VirtualGpu => 2,

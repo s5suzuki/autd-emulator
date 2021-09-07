@@ -4,7 +4,7 @@
  * Created Date: 27/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 20/07/2021
+ * Last Modified: 07/09/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -32,7 +32,7 @@ use shader_version::{glsl::GLSL, OpenGL, Shaders};
 use crate::{
     common::coloring_method::{coloring_hsv, ColoringMethod},
     common::texture::create_texture_resource,
-    sound_source::SoundSource,
+    sound_source::{SoundSource, SourceFlag},
     view::{render_system, render_system::RenderSystem, UpdateFlag, ViewerSettings},
     Matrix4,
 };
@@ -163,6 +163,16 @@ impl SoundSourceViewer {
         if update_flag.contains(UpdateFlag::UPDATE_SOURCE_ALPHA) {
             for pipe_data in self.pipe_data_list.iter_mut() {
                 pipe_data.i_color[3] = settings.source_alpha;
+            }
+        }
+
+        if update_flag.contains(UpdateFlag::UPDATE_SOURCE_FLAG) {
+            for (i, source) in sources.iter().enumerate() {
+                self.pipe_data_list[i].i_color[3] = if source.flag.contains(SourceFlag::HIDDEN) {
+                    0.0
+                } else {
+                    settings.source_alpha
+                };
             }
         }
     }

@@ -4,7 +4,7 @@
  * Created Date: 06/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 28/07/2021
+ * Last Modified: 07/09/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -23,14 +23,16 @@ use std::{collections::VecDeque, f32::consts::PI, time::Instant};
 
 use acoustic_field_viewer::{
     camera_helper,
-    sound_source::SoundSource,
+    sound_source::{SoundSource, SourceFlag},
     view::{
         render_system::RenderSystem, AcousticFiledSliceViewer, SoundSourceViewer, System,
         UpdateFlag,
     },
     Matrix4, Vector3,
 };
-use autd3_core::hardware_defined::{RxGlobalControlFlags, MOD_SAMPLING_FREQ_BASE, SEQ_BASE_FREQ};
+use autd3_core::hardware_defined::{
+    RxGlobalControlFlags, MOD_SAMPLING_FREQ_BASE, NUM_TRANS_IN_UNIT, SEQ_BASE_FREQ,
+};
 use autd3_emulator_server::{
     AutdData, AutdServer, DelayOffset, Gain, GainSequence, Modulation, PointSequence,
 };
@@ -234,6 +236,12 @@ impl App {
                         self.log("geometry");
                         update_flag |= UpdateFlag::INIT_SOURCE;
                         update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
+                        if self.setting.show.len() < self.dev_num {
+                            self.setting.show.resize(self.dev_num, true);
+                        }
+                        if self.setting.enable.len() < self.dev_num {
+                            self.setting.enable.resize(self.dev_num, true);
+                        }
                     }
                     AutdData::Gain(gain) => {
                         self.set_gain(&gain);
@@ -631,6 +639,29 @@ impl App {
                         .build(&ui, &mut self.setting.viewer_setting.source_alpha)
                     {
                         update_flag |= UpdateFlag::UPDATE_SOURCE_ALPHA;
+                    }
+                    ui.separator();
+                    ui.text("Device index/show/enable");
+                    for i in 0..self.dev_num {
+                        ui.text(format!("Device {}", i));
+                        ui.same_line(0.0);
+                        if ui.checkbox(&im_str!("show##{}", i), &mut self.setting.show[i]) {
+                            for j in (i * NUM_TRANS_IN_UNIT)..(i + 1) * NUM_TRANS_IN_UNIT {
+                                self.sources[j]
+                                    .flag
+                                    .set(SourceFlag::HIDDEN, !self.setting.show[i]);
+                            }
+                            update_flag |= UpdateFlag::UPDATE_SOURCE_FLAG;
+                        }
+                        ui.same_line(0.0);
+                        if ui.checkbox(&im_str!("enable##{}", i), &mut self.setting.enable[i]) {
+                            for j in (i * NUM_TRANS_IN_UNIT)..(i + 1) * NUM_TRANS_IN_UNIT {
+                                self.sources[j]
+                                    .flag
+                                    .set(SourceFlag::DISABLE, !self.setting.enable[i]);
+                            }
+                            update_flag |= UpdateFlag::UPDATE_SOURCE_FLAG;
+                        }
                     }
                     ui.separator();
                     ColorPicker::new(
