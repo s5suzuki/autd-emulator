@@ -112,11 +112,11 @@ impl DeviceDirectionViewer {
     fn init_model(&mut self, settings: &ViewerSettings, axis: &[Axis3D]) {
         let len = axis.len();
         let mut models = Vec::with_capacity(len * 3);
-        for k in 0..len {
-            let mut model = vecmath_util::mat4_t(axis[k].pos);
+        for a in axis.iter() {
+            let mut model = vecmath_util::mat4_t(a.pos);
             model = vecmath::col_mat4_mul(
                 model,
-                vecmath_util::mat4_rot(vecmath_util::quaternion_to(axis[k].z, [0., 0., 1.])),
+                vecmath_util::mat4_rot(vecmath_util::quaternion_to(a.z, [0., 0., 1.])),
             );
             models.push(model);
             models.push(model);
@@ -235,16 +235,14 @@ impl DeviceDirectionViewer {
     }
 
     fn update_axis_visual(&mut self, axis: &[Axis3D]) {
-        for i in 0..axis.len() {
-            self.pipe_data_list[3 * i].i_color = [1., 0., 0., if axis[i].show { 1.0 } else { 0.0 }];
+        for (i, a) in axis.iter().enumerate() {
+            self.pipe_data_list[3 * i].i_color = [1., 0., 0., if a.show { 1.0 } else { 0.0 }];
         }
-        for i in 0..axis.len() {
-            self.pipe_data_list[3 * i + 1].i_color =
-                [0., 1., 0., if axis[i].show { 1.0 } else { 0.0 }];
+        for (i, a) in axis.iter().enumerate() {
+            self.pipe_data_list[3 * i + 1].i_color = [0., 1., 0., if a.show { 1.0 } else { 0.0 }];
         }
-        for i in 0..axis.len() {
-            self.pipe_data_list[3 * i + 2].i_color =
-                [0., 0., 1., if axis[i].show { 1.0 } else { 0.0 }];
+        for (i, a) in axis.iter().enumerate() {
+            self.pipe_data_list[3 * i + 2].i_color = [0., 0., 1., if a.show { 1.0 } else { 0.0 }];
         }
     }
 

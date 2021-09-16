@@ -350,10 +350,9 @@ impl App {
             self.update_view(render_sys, UpdateFlag::all());
             self.init = false;
         }
-        self.sound_source_viewer.handle_event(&render_sys, event);
-        self.device_direction_viewer
-            .handle_event(&render_sys, event);
-        self.field_slice_viewer.handle_event(&render_sys, event);
+        self.sound_source_viewer.handle_event(render_sys, event);
+        self.device_direction_viewer.handle_event(render_sys, event);
+        self.field_slice_viewer.handle_event(render_sys, event);
     }
 
     fn update_view(&mut self, render_sys: &mut RenderSystem, update_flag: UpdateFlag) {
@@ -419,8 +418,6 @@ impl App {
                 ];
                 self.setting.viewer_setting.camera_angle =
                     camera_helper::rot_mat_to_euler_angles(&rotm);
-                self.view_projection = render_sys.get_view_projection(&self.setting.viewer_setting);
-                update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
             } else {
                 let mouse_delta =
                     vecmath::vec2_scale(mouse_delta, self.setting.camera_move_speed / 10.0);
@@ -430,9 +427,9 @@ impl App {
                 self.setting.viewer_setting.camera_pos =
                     vecmath::vec3_add(self.setting.viewer_setting.camera_pos, trans);
                 render_sys.camera.position = self.setting.viewer_setting.camera_pos;
-                self.view_projection = render_sys.get_view_projection(&self.setting.viewer_setting);
-                update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
             }
+            self.view_projection = render_sys.get_view_projection(&self.setting.viewer_setting);
+            update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
         }
 
         update_flag
@@ -441,18 +438,18 @@ impl App {
     fn update_ui(&mut self, ui: &Ui, render_sys: &mut RenderSystem) -> UpdateFlag {
         let mut update_flag = UpdateFlag::empty();
         Window::new(im_str!("Controller")).build(ui, || {
-            TabBar::new(im_str!("Settings")).build(&ui, || {
-                TabItem::new(im_str!("Slice")).build(&ui, || {
+            TabBar::new(im_str!("Settings")).build(ui, || {
+                TabItem::new(im_str!("Slice")).build(ui, || {
                     ui.text(im_str!("Slice size"));
                     if Slider::new(im_str!("Slice width"))
                         .range(0..=1000)
-                        .build(&ui, &mut self.setting.viewer_setting.slice_width)
+                        .build(ui, &mut self.setting.viewer_setting.slice_width)
                     {
                         update_flag |= UpdateFlag::UPDATE_SLICE_SIZE;
                     }
                     if Slider::new(im_str!("Slice heigh"))
                         .range(0..=1000)
-                        .build(&ui, &mut self.setting.viewer_setting.slice_height)
+                        .build(ui, &mut self.setting.viewer_setting.slice_height)
                     {
                         update_flag |= UpdateFlag::UPDATE_SLICE_SIZE;
                     }
@@ -460,21 +457,21 @@ impl App {
                     ui.separator();
                     ui.text(im_str!("Slice position"));
                     if Drag::new(im_str!("Slice X"))
-                        .build(&ui, &mut self.setting.viewer_setting.slice_pos[0])
+                        .build(ui, &mut self.setting.viewer_setting.slice_pos[0])
                     {
                         self.field_slice_viewer
                             .move_to(self.setting.viewer_setting.slice_pos);
                         update_flag |= UpdateFlag::UPDATE_SLICE_POS;
                     }
                     if Drag::new(im_str!("Slice Y"))
-                        .build(&ui, &mut self.setting.viewer_setting.slice_pos[1])
+                        .build(ui, &mut self.setting.viewer_setting.slice_pos[1])
                     {
                         self.field_slice_viewer
                             .move_to(self.setting.viewer_setting.slice_pos);
                         update_flag |= UpdateFlag::UPDATE_SLICE_POS;
                     }
                     if Drag::new(im_str!("Slice Z"))
-                        .build(&ui, &mut self.setting.viewer_setting.slice_pos[2])
+                        .build(ui, &mut self.setting.viewer_setting.slice_pos[2])
                     {
                         self.field_slice_viewer
                             .move_to(self.setting.viewer_setting.slice_pos);
@@ -485,7 +482,7 @@ impl App {
                     ui.text(im_str!("Slice Rotation"));
                     if AngleSlider::new(im_str!("Slice RX"))
                         .range_degrees(0.0..=360.0)
-                        .build(&ui, &mut self.setting.viewer_setting.slice_angle[0])
+                        .build(ui, &mut self.setting.viewer_setting.slice_angle[0])
                     {
                         self.field_slice_viewer
                             .rotate_to(self.setting.viewer_setting.slice_angle);
@@ -493,7 +490,7 @@ impl App {
                     }
                     if AngleSlider::new(im_str!("Slice RY"))
                         .range_degrees(0.0..=360.0)
-                        .build(&ui, &mut self.setting.viewer_setting.slice_angle[1])
+                        .build(ui, &mut self.setting.viewer_setting.slice_angle[1])
                     {
                         self.field_slice_viewer
                             .rotate_to(self.setting.viewer_setting.slice_angle);
@@ -501,7 +498,7 @@ impl App {
                     }
                     if AngleSlider::new(im_str!("Slice RZ"))
                         .range_degrees(0.0..=360.0)
-                        .build(&ui, &mut self.setting.viewer_setting.slice_angle[2])
+                        .build(ui, &mut self.setting.viewer_setting.slice_angle[2])
                     {
                         self.field_slice_viewer
                             .rotate_to(self.setting.viewer_setting.slice_angle);
@@ -513,13 +510,13 @@ impl App {
                     if Drag::new(im_str!("Color scale"))
                         .speed(0.1)
                         .range(0.0..=f32::INFINITY)
-                        .build(&ui, &mut self.setting.viewer_setting.color_scale)
+                        .build(ui, &mut self.setting.viewer_setting.color_scale)
                     {
                         update_flag |= UpdateFlag::UPDATE_COLOR_MAP;
                     }
                     if Slider::new(im_str!("Slice alpha"))
                         .range(0.0..=1.0)
-                        .build(&ui, &mut self.setting.viewer_setting.slice_alpha)
+                        .build(ui, &mut self.setting.viewer_setting.slice_alpha)
                     {
                         update_flag |= UpdateFlag::UPDATE_COLOR_MAP;
                     }
@@ -621,10 +618,10 @@ impl App {
                         }
                     }
                 });
-                TabItem::new(im_str!("Camera")).build(&ui, || {
+                TabItem::new(im_str!("Camera")).build(ui, || {
                     ui.text(im_str!("Camera pos"));
                     if Drag::new(im_str!("Camera X"))
-                        .build(&ui, &mut self.setting.viewer_setting.camera_pos[0])
+                        .build(ui, &mut self.setting.viewer_setting.camera_pos[0])
                     {
                         render_sys.camera.position = self.setting.viewer_setting.camera_pos;
                         self.view_projection =
@@ -632,7 +629,7 @@ impl App {
                         update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
                     }
                     if Drag::new(im_str!("Camera Y"))
-                        .build(&ui, &mut self.setting.viewer_setting.camera_pos[1])
+                        .build(ui, &mut self.setting.viewer_setting.camera_pos[1])
                     {
                         render_sys.camera.position = self.setting.viewer_setting.camera_pos;
                         self.view_projection =
@@ -640,7 +637,7 @@ impl App {
                         update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
                     }
                     if Drag::new(im_str!("Camera Z"))
-                        .build(&ui, &mut self.setting.viewer_setting.camera_pos[2])
+                        .build(ui, &mut self.setting.viewer_setting.camera_pos[2])
                     {
                         render_sys.camera.position = self.setting.viewer_setting.camera_pos;
                         self.view_projection =
@@ -652,7 +649,7 @@ impl App {
                     ui.text(im_str!("Camera rotation"));
                     if AngleSlider::new(im_str!("Camera RX"))
                         .range_degrees(-180.0..=180.0)
-                        .build(&ui, &mut self.setting.viewer_setting.camera_angle[0])
+                        .build(ui, &mut self.setting.viewer_setting.camera_angle[0])
                     {
                         camera_helper::set_camera_angle(
                             &mut render_sys.camera,
@@ -664,7 +661,7 @@ impl App {
                     }
                     if AngleSlider::new(im_str!("Camera RY"))
                         .range_degrees(-180.0..=180.0)
-                        .build(&ui, &mut self.setting.viewer_setting.camera_angle[1])
+                        .build(ui, &mut self.setting.viewer_setting.camera_angle[1])
                     {
                         camera_helper::set_camera_angle(
                             &mut render_sys.camera,
@@ -676,7 +673,7 @@ impl App {
                     }
                     if AngleSlider::new(im_str!("Camera RZ"))
                         .range_degrees(-180.0..=180.0)
-                        .build(&ui, &mut self.setting.viewer_setting.camera_angle[2])
+                        .build(ui, &mut self.setting.viewer_setting.camera_angle[2])
                     {
                         camera_helper::set_camera_angle(
                             &mut render_sys.camera,
@@ -691,13 +688,13 @@ impl App {
                     Drag::new(im_str!("camera speed"))
                         .range(0.0..=f32::INFINITY)
                         .speed(0.1)
-                        .build(&ui, &mut self.setting.camera_move_speed);
+                        .build(ui, &mut self.setting.camera_move_speed);
 
                     ui.separator();
                     ui.text(im_str!("Camera perspective"));
                     if AngleSlider::new(im_str!("FOV"))
                         .range_degrees(0.0..=180.0)
-                        .build(&ui, &mut self.setting.viewer_setting.fov)
+                        .build(ui, &mut self.setting.viewer_setting.fov)
                     {
                         self.view_projection =
                             render_sys.get_view_projection(&self.setting.viewer_setting);
@@ -705,7 +702,7 @@ impl App {
                     }
                     if Drag::new(im_str!("Near clip"))
                         .range(0.0..=f32::INFINITY)
-                        .build(&ui, &mut self.setting.viewer_setting.near_clip)
+                        .build(ui, &mut self.setting.viewer_setting.near_clip)
                     {
                         self.view_projection =
                             render_sys.get_view_projection(&self.setting.viewer_setting);
@@ -713,25 +710,25 @@ impl App {
                     }
                     if Drag::new(im_str!("Far clip"))
                         .range(0.0..=f32::INFINITY)
-                        .build(&ui, &mut self.setting.viewer_setting.far_clip)
+                        .build(ui, &mut self.setting.viewer_setting.far_clip)
                     {
                         self.view_projection =
                             render_sys.get_view_projection(&self.setting.viewer_setting);
                         update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
                     }
                 });
-                TabItem::new(im_str!("Config")).build(&ui, || {
+                TabItem::new(im_str!("Config")).build(ui, || {
                     if Drag::new(im_str!("Wavelength"))
                         .speed(0.1)
                         .range(0.0..=f32::INFINITY)
-                        .build(&ui, &mut self.setting.viewer_setting.wave_length)
+                        .build(ui, &mut self.setting.viewer_setting.wave_length)
                     {
                         update_flag |= UpdateFlag::UPDATE_WAVENUM;
                     }
                     ui.separator();
                     if Slider::new(im_str!("Transducer alpha"))
                         .range(0.0..=1.0)
-                        .build(&ui, &mut self.setting.viewer_setting.source_alpha)
+                        .build(ui, &mut self.setting.viewer_setting.source_alpha)
                     {
                         update_flag |= UpdateFlag::UPDATE_SOURCE_ALPHA;
                     }
@@ -766,14 +763,14 @@ impl App {
                     if Drag::new(im_str!("Axis length"))
                         .speed(1.0)
                         .range(0.0..=f32::INFINITY)
-                        .build(&ui, &mut self.setting.viewer_setting.axis_length)
+                        .build(ui, &mut self.setting.viewer_setting.axis_length)
                     {
                         update_flag |= UpdateFlag::UPDATE_AXIS_SIZE;
                     }
                     if Drag::new(im_str!("Axis width"))
                         .speed(0.1)
                         .range(0.0..=f32::INFINITY)
-                        .build(&ui, &mut self.setting.viewer_setting.axis_width)
+                        .build(ui, &mut self.setting.viewer_setting.axis_width)
                     {
                         update_flag |= UpdateFlag::UPDATE_AXIS_SIZE;
                     }
@@ -784,9 +781,9 @@ impl App {
                         &mut self.setting.viewer_setting.background,
                     )
                     .alpha(true)
-                    .build(&ui);
+                    .build(ui);
                 });
-                TabItem::new(im_str!("Info")).build(&ui, || {
+                TabItem::new(im_str!("Info")).build(ui, || {
                     ui.text(format!("fps: {:.1}", self.fps));
 
                     if let Some(m) = &self.modulation {
@@ -966,14 +963,14 @@ impl App {
                     );
                     ui.checkbox_flags(im_str!("SEQ END"), &mut flag, RxGlobalControlFlags::SEQ_END);
                 });
-                TabItem::new(im_str!("Log")).build(&ui, || {
+                TabItem::new(im_str!("Log")).build(ui, || {
                     if ui.radio_button_bool(im_str!("enable"), self.setting.log_enable) {
                         self.setting.log_enable = !self.setting.log_enable;
                     }
                     if self.setting.log_enable {
                         Slider::new(im_str!("Max"))
                             .range(0..=1000)
-                            .build(&ui, &mut self.setting.log_max);
+                            .build(ui, &mut self.setting.log_max);
 
                         ui.text(self.get_log_txt());
                     }
