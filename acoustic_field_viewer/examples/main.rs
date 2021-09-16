@@ -4,7 +4,7 @@
  * Created Date: 27/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 07/09/2021
+ * Last Modified: 16/09/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -14,11 +14,12 @@
 use std::{f32::consts::PI, time::Instant};
 
 use acoustic_field_viewer::{
+    axis_3d::Axis3D,
     camera_helper,
     sound_source::{SoundSource, SourceFlag},
     view::{
-        render_system::RenderSystem, AcousticFiledSliceViewer, SoundSourceViewer, System,
-        UpdateFlag, ViewerSettings,
+        render_system::RenderSystem, AcousticFiledSliceViewer, DeviceDirectionViewer,
+        SoundSourceViewer, System, UpdateFlag, ViewerSettings,
     },
     Matrix4, Vector3,
 };
@@ -42,7 +43,9 @@ const FOCAL_POS: Vector3 = [TRANS_SIZE * 8.5, TRANS_SIZE * 6.5, 150.];
 struct App {
     settings: ViewerSettings,
     sources: Vec<SoundSource>,
+    axes: Vec<Axis3D>,
     sound_source_viewer: SoundSourceViewer,
+    device_direction_viewer: DeviceDirectionViewer,
     field_slice_viewer: AcousticFiledSliceViewer,
     view_projection: (Matrix4, Matrix4),
     focal_pos: Vector3,
@@ -65,15 +68,26 @@ impl App {
             }
         }
 
+        let mut axes = Vec::new();
+        axes.push(Axis3D::new(
+            sources[0].pos,
+            [1., 0., 0.],
+            [0., 1., 0.],
+            [0., 0., 1.],
+        ));
+
         let opengl = OpenGL::V4_5;
         let sound_source_viewer = SoundSourceViewer::new(&system.render_sys, opengl);
+        let device_direction_viewer = DeviceDirectionViewer::new(&system.render_sys, opengl);
         let field_slice_viewer =
             AcousticFiledSliceViewer::new(&system.render_sys, opengl, &settings);
 
         Self {
             settings,
             sources,
+            axes,
             sound_source_viewer,
+            device_direction_viewer,
             field_slice_viewer,
             view_projection: system.render_sys.get_view_projection(&settings),
             focal_pos: FOCAL_POS,
@@ -102,6 +116,13 @@ impl App {
             &self.sources,
             update_flag,
         );
+        self.device_direction_viewer.update(
+            render_sys,
+            self.view_projection,
+            &self.settings,
+            &self.axes,
+            update_flag,
+        );
         self.field_slice_viewer.update(
             render_sys,
             self.view_projection,
@@ -117,6 +138,8 @@ impl App {
             self.init = false;
         }
         self.sound_source_viewer.handle_event(&render_sys, event);
+        self.device_direction_viewer
+            .handle_event(&render_sys, event);
         self.field_slice_viewer.handle_event(&render_sys, event);
     }
 
@@ -418,6 +441,7 @@ impl App {
             encoder.clear_depth(&render_sys.output_stencil, 1.0);
             self.sound_source_viewer.renderer(&mut encoder);
             self.field_slice_viewer.renderer(&mut encoder);
+            self.device_direction_viewer.renderer(&mut encoder);
 
             platform.prepare_render(&ui, render_sys.window());
             let draw_data = ui.render();

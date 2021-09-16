@@ -4,7 +4,7 @@
  * Created Date: 05/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 07/09/2021
+ * Last Modified: 16/09/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -24,6 +24,7 @@ pub struct Setting {
     pub port: u16,
     pub window_width: u32,
     pub window_height: u32,
+    pub camera_move_speed: f32,
     pub viewer_setting: ViewerSettings,
     pub log_enable: bool,
     pub log_max: u32,
@@ -34,6 +35,7 @@ pub struct Setting {
     pub record_path: String,
     pub show: Vec<bool>,
     pub enable: Vec<bool>,
+    pub show_axis: Vec<bool>,
 }
 
 impl Setting {
@@ -42,6 +44,7 @@ impl Setting {
             port: 50632,
             window_width: 960,
             window_height: 640,
+            camera_move_speed: 10.0,
             viewer_setting: ViewerSettings::new(),
             log_enable: true,
             log_max: 100,
@@ -62,6 +65,7 @@ impl Setting {
                 .to_owned(),
             show: vec![],
             enable: vec![],
+            show_axis: vec![],
         }
     }
 

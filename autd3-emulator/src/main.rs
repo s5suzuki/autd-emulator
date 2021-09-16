@@ -4,7 +4,7 @@
  * Created Date: 06/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 07/09/2021
+ * Last Modified: 16/09/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -22,11 +22,12 @@ use offscreen_render_sys::*;
 use std::{collections::VecDeque, f32::consts::PI, time::Instant};
 
 use acoustic_field_viewer::{
+    axis_3d::Axis3D,
     camera_helper,
     sound_source::{SoundSource, SourceFlag},
     view::{
-        render_system::RenderSystem, AcousticFiledSliceViewer, SoundSourceViewer, System,
-        UpdateFlag,
+        render_system::RenderSystem, AcousticFiledSliceViewer, DeviceDirectionViewer,
+        SoundSourceViewer, System, UpdateFlag,
     },
     Matrix4, Vector3,
 };
@@ -50,9 +51,11 @@ use crate::settings::Setting;
 struct App {
     setting: Setting,
     sources: Vec<SoundSource>,
+    axis: Vec<Axis3D>,
     dev_num: usize,
     last_amp: Vec<f32>,
     sound_source_viewer: SoundSourceViewer,
+    device_direction_viewer: DeviceDirectionViewer,
     field_slice_viewer: AcousticFiledSliceViewer,
     view_projection: (Matrix4, Matrix4),
     init: bool,
@@ -77,6 +80,7 @@ impl App {
         let sound_source_viewer = SoundSourceViewer::new(&system.render_sys, opengl);
         let field_slice_viewer =
             AcousticFiledSliceViewer::new(&system.render_sys, opengl, &setting.viewer_setting);
+        let device_direction_viewer = DeviceDirectionViewer::new(&system.render_sys, opengl);
         let view_projection = system
             .render_sys
             .get_view_projection(&setting.viewer_setting);
@@ -87,9 +91,11 @@ impl App {
         Self {
             setting,
             sources: Vec::new(),
+            axis: Vec::new(),
             dev_num: 0,
             last_amp: Vec::new(),
             sound_source_viewer,
+            device_direction_viewer,
             field_slice_viewer,
             view_projection,
             init: true,
@@ -144,6 +150,9 @@ impl App {
                 break;
             }
 
+            let mut update_flag = self.handle_autd(&mut autd_server);
+            update_flag |= self.update_camera(&mut render_sys, imgui.io());
+
             let io = imgui.io_mut();
             platform
                 .prepare_frame(io, render_sys.window())
@@ -152,7 +161,6 @@ impl App {
             io.update_delta_time(now - last_frame);
             last_frame = now;
             let ui = imgui.frame();
-
             {
                 self.frame_count += 1;
                 let now = std::time::Instant::now();
@@ -163,8 +171,6 @@ impl App {
                     self.frame_count = 0;
                 }
             }
-
-            let mut update_flag = self.handle_autd(&mut autd_server);
             update_flag |= self.update_ui(&ui, &mut render_sys);
             self.update_view(&mut render_sys, update_flag);
             #[cfg(feature = "offscreen_renderer")]
@@ -179,6 +185,7 @@ impl App {
             encoder.clear_depth(&render_sys.output_stencil, 1.0);
             self.sound_source_viewer.renderer(&mut encoder);
             self.field_slice_viewer.renderer(&mut encoder);
+            self.device_direction_viewer.renderer(&mut encoder);
 
             platform.prepare_render(&ui, render_sys.window());
             let draw_data = ui.render();
@@ -227,21 +234,36 @@ impl App {
                 match d {
                     AutdData::Geometries(geometries) => {
                         self.sources.clear();
+                        self.axis.clear();
                         self.dev_num = geometries.len();
-                        for geometry in geometries {
-                            for trans in geometry.make_autd_transducers() {
-                                self.sources.push(trans);
-                            }
-                        }
-                        self.log("geometry");
-                        update_flag |= UpdateFlag::INIT_SOURCE;
-                        update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
                         if self.setting.show.len() < self.dev_num {
                             self.setting.show.resize(self.dev_num, true);
                         }
                         if self.setting.enable.len() < self.dev_num {
                             self.setting.enable.resize(self.dev_num, true);
                         }
+                        if self.setting.show_axis.len() < self.dev_num {
+                            self.setting.show_axis.resize(self.dev_num, false);
+                        }
+                        for (i, geometry) in geometries.iter().enumerate() {
+                            for mut trans in geometry.make_autd_transducers() {
+                                trans.flag.set(SourceFlag::HIDDEN, !self.setting.show[i]);
+                                trans.flag.set(SourceFlag::DISABLE, !self.setting.enable[i]);
+                                self.sources.push(trans);
+                            }
+                            let mut axis = Axis3D::new(
+                                geometry.origin,
+                                geometry.right,
+                                geometry.up,
+                                vecmath::vec3_cross(geometry.right, geometry.up),
+                            );
+                            axis.show = self.setting.show_axis[i];
+                            self.axis.push(axis);
+                        }
+                        self.log("geometry");
+                        update_flag |= UpdateFlag::INIT_SOURCE;
+                        update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
+                        update_flag |= UpdateFlag::INIT_AXIS;
                     }
                     AutdData::Gain(gain) => {
                         self.set_gain(&gain);
@@ -329,6 +351,8 @@ impl App {
             self.init = false;
         }
         self.sound_source_viewer.handle_event(&render_sys, event);
+        self.device_direction_viewer
+            .handle_event(&render_sys, event);
         self.field_slice_viewer.handle_event(&render_sys, event);
     }
 
@@ -340,6 +364,13 @@ impl App {
             &self.sources,
             update_flag,
         );
+        self.device_direction_viewer.update(
+            render_sys,
+            self.view_projection,
+            &self.setting.viewer_setting,
+            &self.axis,
+            update_flag,
+        );
         self.field_slice_viewer.update(
             render_sys,
             self.view_projection,
@@ -347,6 +378,64 @@ impl App {
             &self.sources,
             update_flag,
         );
+    }
+
+    fn update_camera(&mut self, render_sys: &mut RenderSystem, io: &Io) -> UpdateFlag {
+        let mut update_flag = UpdateFlag::empty();
+
+        let mouse_wheel = io.mouse_wheel;
+        if mouse_wheel != 0.0 {
+            let trans = vecmath::vec3_scale(
+                render_sys.camera.forward,
+                -mouse_wheel * self.setting.camera_move_speed,
+            );
+            self.setting.viewer_setting.camera_pos =
+                vecmath::vec3_add(self.setting.viewer_setting.camera_pos, trans);
+            render_sys.camera.position = self.setting.viewer_setting.camera_pos;
+            self.view_projection = render_sys.get_view_projection(&self.setting.viewer_setting);
+            update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
+        }
+        let mouse_delta = io.mouse_delta;
+        if !io.want_capture_mouse && io.mouse_down[0] && !vecmath_util::is_zero(&mouse_delta) {
+            if io.key_shift {
+                let mouse_delta =
+                    vecmath::vec2_scale(mouse_delta, self.setting.camera_move_speed / 3000.0);
+                let trans_x = vecmath::vec3_scale(render_sys.camera.right, mouse_delta[0]);
+                let trans_y = vecmath::vec3_scale(render_sys.camera.up, -mouse_delta[1]);
+                let to = vecmath::vec3_add(
+                    vecmath::vec3_add(trans_x, trans_y),
+                    render_sys.camera.forward,
+                );
+                let rot = vecmath_util::quaternion_to(render_sys.camera.forward, to);
+
+                render_sys.camera.forward =
+                    quaternion::rotate_vector(rot, render_sys.camera.forward);
+                render_sys.camera.up = quaternion::rotate_vector(rot, render_sys.camera.up);
+                render_sys.camera.right = quaternion::rotate_vector(rot, render_sys.camera.right);
+                let rotm = [
+                    render_sys.camera.right,
+                    render_sys.camera.up,
+                    render_sys.camera.forward,
+                ];
+                self.setting.viewer_setting.camera_angle =
+                    camera_helper::rot_mat_to_euler_angles(&rotm);
+                self.view_projection = render_sys.get_view_projection(&self.setting.viewer_setting);
+                update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
+            } else {
+                let mouse_delta =
+                    vecmath::vec2_scale(mouse_delta, self.setting.camera_move_speed / 10.0);
+                let trans_x = vecmath::vec3_scale(render_sys.camera.right, -mouse_delta[0]);
+                let trans_y = vecmath::vec3_scale(render_sys.camera.up, mouse_delta[1]);
+                let trans = vecmath::vec3_add(trans_x, trans_y);
+                self.setting.viewer_setting.camera_pos =
+                    vecmath::vec3_add(self.setting.viewer_setting.camera_pos, trans);
+                render_sys.camera.position = self.setting.viewer_setting.camera_pos;
+                self.view_projection = render_sys.get_view_projection(&self.setting.viewer_setting);
+                update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
+            }
+        }
+
+        update_flag
     }
 
     fn update_ui(&mut self, ui: &Ui, render_sys: &mut RenderSystem) -> UpdateFlag {
@@ -599,6 +688,12 @@ impl App {
                     }
 
                     ui.separator();
+                    Drag::new(im_str!("camera speed"))
+                        .range(0.0..=f32::INFINITY)
+                        .speed(0.1)
+                        .build(&ui, &mut self.setting.camera_move_speed);
+
+                    ui.separator();
                     ui.text(im_str!("Camera perspective"));
                     if AngleSlider::new(im_str!("FOV"))
                         .range_degrees(0.0..=180.0)
@@ -641,7 +736,7 @@ impl App {
                         update_flag |= UpdateFlag::UPDATE_SOURCE_ALPHA;
                     }
                     ui.separator();
-                    ui.text("Device index/show/enable");
+                    ui.text("Device index/show/enable/axis");
                     for i in 0..self.dev_num {
                         ui.text(format!("Device {}", i));
                         ui.same_line(0.0);
@@ -662,7 +757,27 @@ impl App {
                             }
                             update_flag |= UpdateFlag::UPDATE_SOURCE_FLAG;
                         }
+                        ui.same_line(0.0);
+                        if ui.checkbox(&im_str!("axis##{}", i), &mut self.setting.show_axis[i]) {
+                            self.axis[i].show = self.setting.show_axis[i];
+                            update_flag |= UpdateFlag::UPDATE_AXIS_FLAG;
+                        }
                     }
+                    if Drag::new(im_str!("Axis length"))
+                        .speed(1.0)
+                        .range(0.0..=f32::INFINITY)
+                        .build(&ui, &mut self.setting.viewer_setting.axis_length)
+                    {
+                        update_flag |= UpdateFlag::UPDATE_AXIS_SIZE;
+                    }
+                    if Drag::new(im_str!("Axis width"))
+                        .speed(0.1)
+                        .range(0.0..=f32::INFINITY)
+                        .build(&ui, &mut self.setting.viewer_setting.axis_width)
+                    {
+                        update_flag |= UpdateFlag::UPDATE_AXIS_SIZE;
+                    }
+
                     ui.separator();
                     ColorPicker::new(
                         im_str!("Background"),

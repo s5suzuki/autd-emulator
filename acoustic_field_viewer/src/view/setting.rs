@@ -4,7 +4,7 @@
  * Created Date: 27/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 22/07/2021
+ * Last Modified: 16/09/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -22,6 +22,8 @@ pub struct ViewerSettings {
     pub frequency: f32,
     pub source_size: f32,
     pub wave_length: f32,
+    pub axis_length: f32,
+    pub axis_width: f32,
     pub color_scale: f32,
     pub slice_alpha: f32,
     pub source_alpha: f32,
@@ -51,6 +53,8 @@ impl Default for ViewerSettings {
             source_size: autd3_core::hardware_defined::TRANS_SPACING_MM as _,
             color_scale: 2.0,
             slice_alpha: 0.95,
+            axis_length: 50.0,
+            axis_width: 2.0,
             wave_length: 8.5,
             slice_width: 400,
             slice_height: 300,

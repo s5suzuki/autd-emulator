@@ -10,7 +10,7 @@ checksum = "d9fe5e32de01730eb1f6b7f5b51c17e03e2325bf40a74f754f04f130043affff"
 
 [[package]]
 name = "acoustic_field_viewer"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "autd3-core",
@@ -102,7 +102,7 @@ dependencies = [
 
 [[package]]
 name = "autd-emulator"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "acoustic_field_viewer",
  "autd3-core",

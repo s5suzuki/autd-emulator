@@ -4,7 +4,7 @@
  * Created Date: 27/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 07/09/2021
+ * Last Modified: 16/09/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -100,7 +100,7 @@ impl AcousticFiledSliceViewer {
                 renderer_sys.output_color.clone(),
                 renderer_sys.output_stencil.clone(),
             ),
-            model: vecmath_util::mat4_scale(1.0),
+            model: vecmath_util::mat4_identity(),
             pso: Self::initialize_shader(factory, glsl),
             slice,
             color_map: scarlet::colormap::ListedColorMap::inferno().transform(iter),
@@ -321,7 +321,7 @@ impl AcousticFiledSliceViewer {
         pipe::Data {
             vertex_buffer,
             u_model_view_proj: [[0.; 4]; 4],
-            u_model: vecmath_util::mat4_scale(1.0),
+            u_model: vecmath_util::mat4_identity(),
             u_color_scale: 1.0,
             u_wavenum: 0.0,
             u_trans_num: 0.0,
