@@ -1,7 +1,7 @@
 pub type Vector3 = vecmath::Vector3<f32>;
 pub type Vector4 = vecmath::Vector4<f32>;
 pub type Matrix4 = vecmath::Matrix4<f32>;
-pub type Quaterion = quaternion::Quaternion<f32>;
+pub type Quaternion = quaternion::Quaternion<f32>;
 
 pub fn is_zero<T: std::cmp::PartialEq<T> + num_traits::Zero>(vec: &[T]) -> bool {
     for v in vec {
@@ -43,11 +43,20 @@ pub fn dist(l: Vector3, r: Vector3) -> f32 {
     vecmath::vec3_dot(d, d).sqrt()
 }
 
-pub fn mat4_scale(s: f32) -> Matrix4 {
+pub fn mat4_identity() -> Matrix4 {
     [
-        [s, 0., 0., 0.],
-        [0., s, 0., 0.],
-        [0., 0., s, 0.],
+        [1., 0., 0., 0.],
+        [0., 1., 0., 0.],
+        [0., 0., 1., 0.],
+        [0., 0., 0., 1.],
+    ]
+}
+
+pub fn mat4_scale(s: Vector3) -> Matrix4 {
+    [
+        [s[0], 0., 0., 0.],
+        [0., s[1], 0., 0.],
+        [0., 0., s[2], 0.],
         [0., 0., 0., 1.],
     ]
 }
@@ -75,7 +84,7 @@ pub fn mat4_ts(pos: Vector3, scale: f32) -> Matrix4 {
     ]
 }
 
-pub fn mat4_rot(rot: Quaterion) -> Matrix4 {
+pub fn mat4_rot(rot: Quaternion) -> Matrix4 {
     let x = rot.1[0];
     let y = rot.1[1];
     let z = rot.1[2];
@@ -103,7 +112,7 @@ pub fn mat4_rot(rot: Quaterion) -> Matrix4 {
     ]
 }
 
-pub fn quaternion_to(vec: Vector3, to: Vector3) -> Quaterion {
+pub fn quaternion_to(vec: Vector3, to: Vector3) -> Quaternion {
     let a = vecmath::vec3_normalized(vec);
     let b = vecmath::vec3_normalized(to);
 

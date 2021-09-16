@@ -51,7 +51,7 @@ use crate::settings::Setting;
 struct App {
     setting: Setting,
     sources: Vec<SoundSource>,
-    directions: Vec<Axis3D>,
+    axis: Vec<Axis3D>,
     dev_num: usize,
     last_amp: Vec<f32>,
     sound_source_viewer: SoundSourceViewer,
@@ -91,7 +91,7 @@ impl App {
         Self {
             setting,
             sources: Vec::new(),
-            directions: Vec::new(),
+            axis: Vec::new(),
             dev_num: 0,
             last_amp: Vec::new(),
             sound_source_viewer,
@@ -234,32 +234,36 @@ impl App {
                 match d {
                     AutdData::Geometries(geometries) => {
                         self.sources.clear();
-                        self.directions.clear();
+                        self.axis.clear();
                         self.dev_num = geometries.len();
-                        for geometry in geometries {
-                            for trans in geometry.make_autd_transducers() {
-                                self.sources.push(trans);
-                            }
-                            self.directions.push(Axis3D::new(
-                                geometry.origin,
-                                geometry.right,
-                                geometry.up,
-                                vecmath::vec3_cross(geometry.right, geometry.up),
-                            ));
-                        }
-                        self.log("geometry");
-                        update_flag |= UpdateFlag::INIT_SOURCE;
-                        update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
-                        update_flag |= UpdateFlag::INIT_AXIS;
                         if self.setting.show.len() < self.dev_num {
                             self.setting.show.resize(self.dev_num, true);
                         }
                         if self.setting.enable.len() < self.dev_num {
                             self.setting.enable.resize(self.dev_num, true);
                         }
-                        if self.setting.show_dir.len() < self.dev_num {
-                            self.setting.show_dir.resize(self.dev_num, false);
+                        if self.setting.show_axis.len() < self.dev_num {
+                            self.setting.show_axis.resize(self.dev_num, false);
                         }
+                        for (i, geometry) in geometries.iter().enumerate() {
+                            for mut trans in geometry.make_autd_transducers() {
+                                trans.flag.set(SourceFlag::HIDDEN, !self.setting.show[i]);
+                                trans.flag.set(SourceFlag::DISABLE, !self.setting.enable[i]);
+                                self.sources.push(trans);
+                            }
+                            let mut axis = Axis3D::new(
+                                geometry.origin,
+                                geometry.right,
+                                geometry.up,
+                                vecmath::vec3_cross(geometry.right, geometry.up),
+                            );
+                            axis.show = self.setting.show_axis[i];
+                            self.axis.push(axis);
+                        }
+                        self.log("geometry");
+                        update_flag |= UpdateFlag::INIT_SOURCE;
+                        update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
+                        update_flag |= UpdateFlag::INIT_AXIS;
                     }
                     AutdData::Gain(gain) => {
                         self.set_gain(&gain);
@@ -364,7 +368,7 @@ impl App {
             render_sys,
             self.view_projection,
             &self.setting.viewer_setting,
-            &self.directions,
+            &self.axis,
             update_flag,
         );
         self.field_slice_viewer.update(
@@ -668,7 +672,7 @@ impl App {
                         update_flag |= UpdateFlag::UPDATE_SOURCE_ALPHA;
                     }
                     ui.separator();
-                    ui.text("Device index/show/enable/direction");
+                    ui.text("Device index/show/enable/axis");
                     for i in 0..self.dev_num {
                         ui.text(format!("Device {}", i));
                         ui.same_line(0.0);
@@ -690,8 +694,8 @@ impl App {
                             update_flag |= UpdateFlag::UPDATE_SOURCE_FLAG;
                         }
                         ui.same_line(0.0);
-                        if ui.checkbox(&im_str!("axis##{}", i), &mut self.setting.show_dir[i]) {
-                            self.directions[i].show = self.setting.show_dir[i];
+                        if ui.checkbox(&im_str!("axis##{}", i), &mut self.setting.show_axis[i]) {
+                            self.axis[i].show = self.setting.show_axis[i];
                             update_flag |= UpdateFlag::UPDATE_AXIS_FLAG;
                         }
                     }

@@ -4,7 +4,7 @@
  * Created Date: 27/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 07/09/2021
+ * Last Modified: 16/09/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -107,7 +107,7 @@ impl SoundSourceViewer {
     fn init_model(&mut self, settings: &ViewerSettings, sources: &[SoundSource]) {
         let len = sources.len();
         let s = 0.5 * settings.source_size;
-        self.models = vec![vecmath_util::mat4_scale(s); len];
+        self.models = vec![vecmath_util::mat4_scale([s, s, s]); len];
     }
 
     pub fn update(
@@ -155,14 +155,22 @@ impl SoundSourceViewer {
                 self.pipe_data_list[i].i_color = (self.coloring_method)(
                     source.phase / (2.0 * PI),
                     source.amp,
-                    settings.source_alpha,
+                    if source.flag.contains(SourceFlag::HIDDEN) {
+                        0.0
+                    } else {
+                        settings.source_alpha
+                    },
                 );
             }
         }
 
         if update_flag.contains(UpdateFlag::UPDATE_SOURCE_ALPHA) {
-            for pipe_data in self.pipe_data_list.iter_mut() {
-                pipe_data.i_color[3] = settings.source_alpha;
+            for (i, pipe_data) in self.pipe_data_list.iter_mut().enumerate() {
+                pipe_data.i_color[3] = if sources[i].flag.contains(SourceFlag::HIDDEN) {
+                    0.0
+                } else {
+                    settings.source_alpha
+                };
             }
         }
 

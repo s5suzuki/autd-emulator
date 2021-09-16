@@ -109,41 +109,43 @@ impl DeviceDirectionViewer {
         }
     }
 
-    fn init_model(&mut self, settings: &ViewerSettings, directions: &[Axis3D]) {
-        let len = directions.len();
+    fn init_model(&mut self, settings: &ViewerSettings, axis: &[Axis3D]) {
+        let len = axis.len();
         let mut models = Vec::with_capacity(len * 3);
         for k in 0..len {
-            models.push(vecmath_util::mat4_t(directions[k].pos));
-            models.push(vecmath_util::mat4_t(directions[k].pos));
-            models.push(vecmath_util::mat4_t(directions[k].pos));
+            let mut model = vecmath_util::mat4_t(axis[k].pos);
+            model = vecmath::col_mat4_mul(
+                model,
+                vecmath_util::mat4_rot(vecmath_util::quaternion_to(axis[k].z, [0., 0., 1.])),
+            );
+            models.push(model);
+            models.push(model);
+            models.push(model);
         }
 
         for k in 0..len {
-            models[3 * k][0][0] = settings.axis_length;
-            models[3 * k][1][1] = settings.axis_width;
-            models[3 * k][2][2] = settings.axis_width;
-            models[3 * k] = vecmath::col_mat4_mul(
-                models[3 * k],
-                vecmath_util::mat4_rot(vecmath_util::quaternion_to(directions[k].x, [1., 0., 0.])),
-            );
+            let s = vecmath_util::mat4_scale([
+                settings.axis_length,
+                settings.axis_width,
+                settings.axis_width,
+            ]);
+            models[3 * k] = vecmath::col_mat4_mul(models[3 * k], s);
         }
         for k in 0..len {
-            models[3 * k + 1][0][0] = settings.axis_width;
-            models[3 * k + 1][1][1] = settings.axis_length;
-            models[3 * k + 1][2][2] = settings.axis_width;
-            models[3 * k + 1] = vecmath::col_mat4_mul(
-                models[3 * k + 1],
-                vecmath_util::mat4_rot(vecmath_util::quaternion_to(directions[k].y, [0., 1., 0.])),
-            );
+            let s = vecmath_util::mat4_scale([
+                settings.axis_width,
+                settings.axis_length,
+                settings.axis_width,
+            ]);
+            models[3 * k + 1] = vecmath::col_mat4_mul(models[3 * k + 1], s);
         }
         for k in 0..len {
-            models[3 * k + 2][0][0] = settings.axis_width;
-            models[3 * k + 2][1][1] = settings.axis_width;
-            models[3 * k + 2][2][2] = settings.axis_length;
-            models[3 * k + 2] = vecmath::col_mat4_mul(
-                models[3 * k + 2],
-                vecmath_util::mat4_rot(vecmath_util::quaternion_to(directions[k].z, [0., 0., 1.])),
-            );
+            let s = vecmath_util::mat4_scale([
+                settings.axis_width,
+                settings.axis_width,
+                settings.axis_length,
+            ]);
+            models[3 * k + 2] = vecmath::col_mat4_mul(models[3 * k + 2], s);
         }
 
         self.models = models;
@@ -154,7 +156,7 @@ impl DeviceDirectionViewer {
         render_sys: &mut RenderSystem,
         view_projection: (Matrix4, Matrix4),
         settings: &ViewerSettings,
-        directions: &[Axis3D],
+        axis: &[Axis3D],
         update_flag: UpdateFlag,
     ) {
         if update_flag.contains(UpdateFlag::INIT_AXIS) {
@@ -162,10 +164,10 @@ impl DeviceDirectionViewer {
                 self.vertex_buffer.clone(),
                 render_sys.output_color.clone(),
                 render_sys.output_stencil.clone(),
-                directions,
+                axis,
             );
-            self.update_axis_visual(directions);
-            self.init_model(settings, directions);
+            self.update_axis_visual(axis);
+            self.init_model(settings, axis);
             for i in 0..self.pipe_data_list.len() {
                 self.pipe_data_list[i].u_model_view_proj =
                     model_view_projection(self.models[i], view_projection.0, view_projection.1);
@@ -173,7 +175,7 @@ impl DeviceDirectionViewer {
         }
 
         if update_flag.contains(UpdateFlag::UPDATE_AXIS_SIZE) {
-            self.init_model(settings, directions);
+            self.init_model(settings, axis);
             for i in 0..self.pipe_data_list.len() {
                 self.pipe_data_list[i].u_model_view_proj =
                     model_view_projection(self.models[i], view_projection.0, view_projection.1);
@@ -181,7 +183,7 @@ impl DeviceDirectionViewer {
         }
 
         if update_flag.contains(UpdateFlag::UPDATE_AXIS_FLAG) {
-            self.update_axis_visual(directions);
+            self.update_axis_visual(axis);
         }
 
         if update_flag.contains(UpdateFlag::UPDATE_CAMERA_POS) {
@@ -218,7 +220,7 @@ impl DeviceDirectionViewer {
         vertex_buffer: Buffer<Resources, Vertex>,
         out_color: RenderTargetView<Resources, (format::R8_G8_B8_A8, format::Srgb)>,
         out_depth: DepthStencilView<Resources, (format::D24_S8, format::Unorm)>,
-        directions: &[Axis3D],
+        axis: &[Axis3D],
     ) -> Vec<pipe::Data<Resources>> {
         vec![
             pipe::Data {
@@ -228,22 +230,21 @@ impl DeviceDirectionViewer {
                 out_color,
                 out_depth,
             };
-            directions.len() * 3
+            axis.len() * 3
         ]
     }
 
-    fn update_axis_visual(&mut self, directions: &[Axis3D]) {
-        for i in 0..directions.len() {
-            self.pipe_data_list[3 * i].i_color =
-                [1., 0., 0., if directions[i].show { 1.0 } else { 0.0 }];
+    fn update_axis_visual(&mut self, axis: &[Axis3D]) {
+        for i in 0..axis.len() {
+            self.pipe_data_list[3 * i].i_color = [1., 0., 0., if axis[i].show { 1.0 } else { 0.0 }];
         }
-        for i in 0..directions.len() {
+        for i in 0..axis.len() {
             self.pipe_data_list[3 * i + 1].i_color =
-                [0., 1., 0., if directions[i].show { 1.0 } else { 0.0 }];
+                [0., 1., 0., if axis[i].show { 1.0 } else { 0.0 }];
         }
-        for i in 0..directions.len() {
+        for i in 0..axis.len() {
             self.pipe_data_list[3 * i + 2].i_color =
-                [0., 0., 1., if directions[i].show { 1.0 } else { 0.0 }];
+                [0., 0., 1., if axis[i].show { 1.0 } else { 0.0 }];
         }
     }
 

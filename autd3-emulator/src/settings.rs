@@ -34,7 +34,7 @@ pub struct Setting {
     pub record_path: String,
     pub show: Vec<bool>,
     pub enable: Vec<bool>,
-    pub show_dir: Vec<bool>,
+    pub show_axis: Vec<bool>,
 }
 
 impl Setting {
@@ -63,7 +63,7 @@ impl Setting {
                 .to_owned(),
             show: vec![],
             enable: vec![],
-            show_dir: vec![],
+            show_axis: vec![],
         }
     }
 
