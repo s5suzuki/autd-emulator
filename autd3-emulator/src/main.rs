@@ -150,6 +150,9 @@ impl App {
                 break;
             }
 
+            let mut update_flag = self.handle_autd(&mut autd_server);
+            update_flag |= self.update_camera(&mut render_sys, imgui.io());
+
             let io = imgui.io_mut();
             platform
                 .prepare_frame(io, render_sys.window())
@@ -158,7 +161,6 @@ impl App {
             io.update_delta_time(now - last_frame);
             last_frame = now;
             let ui = imgui.frame();
-
             {
                 self.frame_count += 1;
                 let now = std::time::Instant::now();
@@ -169,8 +171,6 @@ impl App {
                     self.frame_count = 0;
                 }
             }
-
-            let mut update_flag = self.handle_autd(&mut autd_server);
             update_flag |= self.update_ui(&ui, &mut render_sys);
             self.update_view(&mut render_sys, update_flag);
             #[cfg(feature = "offscreen_renderer")]
@@ -378,6 +378,64 @@ impl App {
             &self.sources,
             update_flag,
         );
+    }
+
+    fn update_camera(&mut self, render_sys: &mut RenderSystem, io: &Io) -> UpdateFlag {
+        let mut update_flag = UpdateFlag::empty();
+
+        let mouse_wheel = io.mouse_wheel;
+        if mouse_wheel != 0.0 {
+            let trans = vecmath::vec3_scale(
+                render_sys.camera.forward,
+                -mouse_wheel * self.setting.camera_move_speed,
+            );
+            self.setting.viewer_setting.camera_pos =
+                vecmath::vec3_add(self.setting.viewer_setting.camera_pos, trans);
+            render_sys.camera.position = self.setting.viewer_setting.camera_pos;
+            self.view_projection = render_sys.get_view_projection(&self.setting.viewer_setting);
+            update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
+        }
+        let mouse_delta = io.mouse_delta;
+        if !io.want_capture_mouse && io.mouse_down[0] && !vecmath_util::is_zero(&mouse_delta) {
+            if io.key_shift {
+                let mouse_delta =
+                    vecmath::vec2_scale(mouse_delta, self.setting.camera_move_speed / 3000.0);
+                let trans_x = vecmath::vec3_scale(render_sys.camera.right, mouse_delta[0]);
+                let trans_y = vecmath::vec3_scale(render_sys.camera.up, -mouse_delta[1]);
+                let to = vecmath::vec3_add(
+                    vecmath::vec3_add(trans_x, trans_y),
+                    render_sys.camera.forward,
+                );
+                let rot = vecmath_util::quaternion_to(render_sys.camera.forward, to);
+
+                render_sys.camera.forward =
+                    quaternion::rotate_vector(rot, render_sys.camera.forward);
+                render_sys.camera.up = quaternion::rotate_vector(rot, render_sys.camera.up);
+                render_sys.camera.right = quaternion::rotate_vector(rot, render_sys.camera.right);
+                let rotm = [
+                    render_sys.camera.right,
+                    render_sys.camera.up,
+                    render_sys.camera.forward,
+                ];
+                self.setting.viewer_setting.camera_angle =
+                    camera_helper::rot_mat_to_euler_angles(&rotm);
+                self.view_projection = render_sys.get_view_projection(&self.setting.viewer_setting);
+                update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
+            } else {
+                let mouse_delta =
+                    vecmath::vec2_scale(mouse_delta, self.setting.camera_move_speed / 10.0);
+                let trans_x = vecmath::vec3_scale(render_sys.camera.right, -mouse_delta[0]);
+                let trans_y = vecmath::vec3_scale(render_sys.camera.up, mouse_delta[1]);
+                let trans = vecmath::vec3_add(trans_x, trans_y);
+                self.setting.viewer_setting.camera_pos =
+                    vecmath::vec3_add(self.setting.viewer_setting.camera_pos, trans);
+                render_sys.camera.position = self.setting.viewer_setting.camera_pos;
+                self.view_projection = render_sys.get_view_projection(&self.setting.viewer_setting);
+                update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
+            }
+        }
+
+        update_flag
     }
 
     fn update_ui(&mut self, ui: &Ui, render_sys: &mut RenderSystem) -> UpdateFlag {
@@ -628,6 +686,12 @@ impl App {
                             render_sys.get_view_projection(&self.setting.viewer_setting);
                         update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
                     }
+
+                    ui.separator();
+                    Drag::new(im_str!("camera speed"))
+                        .range(0.0..=f32::INFINITY)
+                        .speed(0.1)
+                        .build(&ui, &mut self.setting.camera_move_speed);
 
                     ui.separator();
                     ui.text(im_str!("Camera perspective"));
