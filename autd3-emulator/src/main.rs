@@ -4,7 +4,7 @@
  * Created Date: 06/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 07/09/2021
+ * Last Modified: 16/09/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -22,11 +22,12 @@ use offscreen_render_sys::*;
 use std::{collections::VecDeque, f32::consts::PI, time::Instant};
 
 use acoustic_field_viewer::{
+    axis_3d::Axis3D,
     camera_helper,
     sound_source::{SoundSource, SourceFlag},
     view::{
-        render_system::RenderSystem, AcousticFiledSliceViewer, SoundSourceViewer, System,
-        UpdateFlag,
+        render_system::RenderSystem, AcousticFiledSliceViewer, DeviceDirectionViewer,
+        SoundSourceViewer, System, UpdateFlag,
     },
     Matrix4, Vector3,
 };
@@ -50,9 +51,11 @@ use crate::settings::Setting;
 struct App {
     setting: Setting,
     sources: Vec<SoundSource>,
+    directions: Vec<Axis3D>,
     dev_num: usize,
     last_amp: Vec<f32>,
     sound_source_viewer: SoundSourceViewer,
+    device_direction_viewer: DeviceDirectionViewer,
     field_slice_viewer: AcousticFiledSliceViewer,
     view_projection: (Matrix4, Matrix4),
     init: bool,
@@ -77,6 +80,7 @@ impl App {
         let sound_source_viewer = SoundSourceViewer::new(&system.render_sys, opengl);
         let field_slice_viewer =
             AcousticFiledSliceViewer::new(&system.render_sys, opengl, &setting.viewer_setting);
+        let device_direction_viewer = DeviceDirectionViewer::new(&system.render_sys, opengl);
         let view_projection = system
             .render_sys
             .get_view_projection(&setting.viewer_setting);
@@ -87,9 +91,11 @@ impl App {
         Self {
             setting,
             sources: Vec::new(),
+            directions: Vec::new(),
             dev_num: 0,
             last_amp: Vec::new(),
             sound_source_viewer,
+            device_direction_viewer,
             field_slice_viewer,
             view_projection,
             init: true,
@@ -179,6 +185,7 @@ impl App {
             encoder.clear_depth(&render_sys.output_stencil, 1.0);
             self.sound_source_viewer.renderer(&mut encoder);
             self.field_slice_viewer.renderer(&mut encoder);
+            self.device_direction_viewer.renderer(&mut encoder);
 
             platform.prepare_render(&ui, render_sys.window());
             let draw_data = ui.render();
@@ -227,20 +234,31 @@ impl App {
                 match d {
                     AutdData::Geometries(geometries) => {
                         self.sources.clear();
+                        self.directions.clear();
                         self.dev_num = geometries.len();
                         for geometry in geometries {
                             for trans in geometry.make_autd_transducers() {
                                 self.sources.push(trans);
                             }
+                            self.directions.push(Axis3D::new(
+                                geometry.origin,
+                                geometry.right,
+                                geometry.up,
+                                vecmath::vec3_cross(geometry.right, geometry.up),
+                            ));
                         }
                         self.log("geometry");
                         update_flag |= UpdateFlag::INIT_SOURCE;
                         update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
+                        update_flag |= UpdateFlag::INIT_AXIS;
                         if self.setting.show.len() < self.dev_num {
                             self.setting.show.resize(self.dev_num, true);
                         }
                         if self.setting.enable.len() < self.dev_num {
                             self.setting.enable.resize(self.dev_num, true);
+                        }
+                        if self.setting.show_dir.len() < self.dev_num {
+                            self.setting.show_dir.resize(self.dev_num, false);
                         }
                     }
                     AutdData::Gain(gain) => {
@@ -329,6 +347,8 @@ impl App {
             self.init = false;
         }
         self.sound_source_viewer.handle_event(&render_sys, event);
+        self.device_direction_viewer
+            .handle_event(&render_sys, event);
         self.field_slice_viewer.handle_event(&render_sys, event);
     }
 
@@ -338,6 +358,13 @@ impl App {
             self.view_projection,
             &self.setting.viewer_setting,
             &self.sources,
+            update_flag,
+        );
+        self.device_direction_viewer.update(
+            render_sys,
+            self.view_projection,
+            &self.setting.viewer_setting,
+            &self.directions,
             update_flag,
         );
         self.field_slice_viewer.update(
@@ -641,7 +668,7 @@ impl App {
                         update_flag |= UpdateFlag::UPDATE_SOURCE_ALPHA;
                     }
                     ui.separator();
-                    ui.text("Device index/show/enable");
+                    ui.text("Device index/show/enable/direction");
                     for i in 0..self.dev_num {
                         ui.text(format!("Device {}", i));
                         ui.same_line(0.0);
@@ -662,7 +689,27 @@ impl App {
                             }
                             update_flag |= UpdateFlag::UPDATE_SOURCE_FLAG;
                         }
+                        ui.same_line(0.0);
+                        if ui.checkbox(&im_str!("axis##{}", i), &mut self.setting.show_dir[i]) {
+                            self.directions[i].show = self.setting.show_dir[i];
+                            update_flag |= UpdateFlag::UPDATE_AXIS_FLAG;
+                        }
                     }
+                    if Drag::new(im_str!("Axis length"))
+                        .speed(1.0)
+                        .range(0.0..=f32::INFINITY)
+                        .build(&ui, &mut self.setting.viewer_setting.axis_length)
+                    {
+                        update_flag |= UpdateFlag::UPDATE_AXIS_SIZE;
+                    }
+                    if Drag::new(im_str!("Axis width"))
+                        .speed(0.1)
+                        .range(0.0..=f32::INFINITY)
+                        .build(&ui, &mut self.setting.viewer_setting.axis_width)
+                    {
+                        update_flag |= UpdateFlag::UPDATE_AXIS_SIZE;
+                    }
+
                     ui.separator();
                     ColorPicker::new(
                         im_str!("Background"),

@@ -3,6 +3,7 @@ extern crate gfx;
 #[macro_use]
 extern crate bitflags;
 
+pub mod axis_3d;
 pub mod camera_helper;
 mod common;
 pub mod sound_source;

@@ -4,7 +4,7 @@
  * Created Date: 07/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 07/09/2021
+ * Last Modified: 16/09/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -22,5 +22,8 @@ bitflags! {
         const UPDATE_SOURCE_ALPHA = 1 << 7;
         const UPDATE_SOURCE_FLAG = 1 << 8;
         const INIT_SOURCE = 1 << 9;
+        const INIT_AXIS = 1 << 10;
+        const UPDATE_AXIS_SIZE = 1 << 11;
+        const UPDATE_AXIS_FLAG = 1 << 12;
     }
 }
