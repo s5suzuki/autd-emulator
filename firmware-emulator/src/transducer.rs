@@ -4,7 +4,7 @@
  * Created Date: 17/09/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 17/09/2021
+ * Last Modified: 19/09/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -13,6 +13,7 @@
 
 use std::collections::VecDeque;
 
+#[derive(Clone)]
 pub struct Transducer {
     r_d: f64,
     c_p: f64,
