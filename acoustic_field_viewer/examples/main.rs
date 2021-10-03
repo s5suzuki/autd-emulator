@@ -4,7 +4,7 @@
  * Created Date: 27/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 16/09/2021
+ * Last Modified: 03/10/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -143,24 +143,24 @@ impl App {
 
     fn update_ui(&mut self, ui: &Ui, render_sys: &mut RenderSystem) -> UpdateFlag {
         let mut update_flag = UpdateFlag::empty();
-        TabBar::new(im_str!("Settings")).build(ui, || {
-            TabItem::new(im_str!("Focus")).build(ui, || {
-                ui.text(im_str!("Focus position"));
-                if Drag::new(im_str!("Pos X")).build(ui, &mut self.focal_pos[0]) {
+        TabBar::new("Settings").build(ui, || {
+            TabItem::new("Focus").build(ui, || {
+                ui.text("Focus position");
+                if Drag::new("Pos X").build(ui, &mut self.focal_pos[0]) {
                     Self::calc_focus_phase(self.focal_pos, &mut self.sources, &self.settings);
                     update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
                 }
-                if Drag::new(im_str!("Pos Y")).build(ui, &mut self.focal_pos[1]) {
+                if Drag::new("Pos Y").build(ui, &mut self.focal_pos[1]) {
                     Self::calc_focus_phase(self.focal_pos, &mut self.sources, &self.settings);
                     update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
                 }
-                if Drag::new(im_str!("Pos Z")).build(ui, &mut self.focal_pos[2]) {
+                if Drag::new("Pos Z").build(ui, &mut self.focal_pos[2]) {
                     Self::calc_focus_phase(self.focal_pos, &mut self.sources, &self.settings);
 
                     update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
                 }
-                if Drag::new(im_str!("Wavelength"))
-                    .range(0.0..=f32::INFINITY)
+                if Drag::new("Wavelength")
+                    .range(0.0, f32::INFINITY)
                     .build(ui, &mut self.settings.wave_length)
                 {
                     Self::calc_focus_phase(self.focal_pos, &mut self.sources, &self.settings);
@@ -168,45 +168,44 @@ impl App {
                 }
 
                 ui.separator();
-                if Slider::new(im_str!("Transducer alpha"))
-                    .range(0.0..=1.0)
+                if Slider::new("Transducer alpha", 0.0, 1.0)
                     .build(ui, &mut self.settings.source_alpha)
                 {
                     update_flag |= UpdateFlag::UPDATE_SOURCE_ALPHA;
                 }
             });
-            TabItem::new(im_str!("Slice")).build(ui, || {
-                ui.text(im_str!("Slice position"));
-                if Drag::new(im_str!("Slice X")).build(ui, &mut self.settings.slice_pos[0]) {
+            TabItem::new("Slice").build(ui, || {
+                ui.text("Slice position");
+                if Drag::new("Slice X").build(ui, &mut self.settings.slice_pos[0]) {
                     self.field_slice_viewer.move_to(self.settings.slice_pos);
                     update_flag |= UpdateFlag::UPDATE_SLICE_POS;
                 }
-                if Drag::new(im_str!("Slice Y")).build(ui, &mut self.settings.slice_pos[1]) {
+                if Drag::new("Slice Y").build(ui, &mut self.settings.slice_pos[1]) {
                     self.field_slice_viewer.move_to(self.settings.slice_pos);
                     update_flag |= UpdateFlag::UPDATE_SLICE_POS;
                 }
-                if Drag::new(im_str!("Slice Z")).build(ui, &mut self.settings.slice_pos[2]) {
+                if Drag::new("Slice Z").build(ui, &mut self.settings.slice_pos[2]) {
                     self.field_slice_viewer.move_to(self.settings.slice_pos);
                     update_flag |= UpdateFlag::UPDATE_SLICE_POS;
                 }
                 ui.separator();
-                ui.text(im_str!("Slice Rotation"));
-                if AngleSlider::new(im_str!("Slice RX"))
-                    .range_degrees(0.0..=360.0)
+                ui.text("Slice Rotation");
+                if AngleSlider::new("Slice RX")
+                    .range_degrees(0.0, 360.0)
                     .build(ui, &mut self.settings.slice_angle[0])
                 {
                     self.field_slice_viewer.rotate_to(self.settings.slice_angle);
                     update_flag |= UpdateFlag::UPDATE_SLICE_POS;
                 }
-                if AngleSlider::new(im_str!("Slice RY"))
-                    .range_degrees(0.0..=360.0)
+                if AngleSlider::new("Slice RY")
+                    .range_degrees(0.0, 360.0)
                     .build(ui, &mut self.settings.slice_angle[1])
                 {
                     self.field_slice_viewer.rotate_to(self.settings.slice_angle);
                     update_flag |= UpdateFlag::UPDATE_SLICE_POS;
                 }
-                if AngleSlider::new(im_str!("Slice RZ"))
-                    .range_degrees(0.0..=360.0)
+                if AngleSlider::new("Slice RZ")
+                    .range_degrees(0.0, 360.0)
                     .build(ui, &mut self.settings.slice_angle[2])
                 {
                     self.field_slice_viewer.rotate_to(self.settings.slice_angle);
@@ -214,60 +213,54 @@ impl App {
                 }
 
                 ui.separator();
-                ui.text(im_str!("Slice color setting"));
-                if Slider::new(im_str!("Color scale"))
-                    .range(0.0..=10.0)
-                    .build(ui, &mut self.settings.color_scale)
-                {
+                ui.text("Slice color setting");
+                if Slider::new("Color scale", 0.0, 10.0).build(ui, &mut self.settings.color_scale) {
                     update_flag |= UpdateFlag::UPDATE_COLOR_MAP;
                 }
-                if Slider::new(im_str!("Slice alpha"))
-                    .range(0.0..=1.0)
-                    .build(ui, &mut self.settings.slice_alpha)
-                {
+                if Slider::new("Slice alpha", 0.0, 1.0).build(ui, &mut self.settings.slice_alpha) {
                     update_flag |= UpdateFlag::UPDATE_COLOR_MAP;
                 }
 
                 ui.separator();
-                if ui.small_button(im_str!("xy")) {
+                if ui.small_button("xy") {
                     self.settings.slice_angle = [0., 0., 0.];
                     self.field_slice_viewer.rotate_to(self.settings.slice_angle);
                     update_flag |= UpdateFlag::UPDATE_SLICE_POS;
                 }
-                ui.same_line(0.);
-                if ui.small_button(im_str!("yz")) {
+                ui.same_line();
+                if ui.small_button("yz") {
                     self.settings.slice_angle = [0., -PI / 2., 0.];
                     self.field_slice_viewer.rotate_to(self.settings.slice_angle);
                     update_flag |= UpdateFlag::UPDATE_SLICE_POS;
                 }
-                ui.same_line(0.);
-                if ui.small_button(im_str!("zx")) {
+                ui.same_line();
+                if ui.small_button("zx") {
                     self.settings.slice_angle = [PI / 2., 0., 0.];
                     self.field_slice_viewer.rotate_to(self.settings.slice_angle);
                     update_flag |= UpdateFlag::UPDATE_SLICE_POS;
                 }
             });
-            TabItem::new(im_str!("Camera")).build(ui, || {
-                ui.text(im_str!("Camera pos"));
-                if Drag::new(im_str!("Camera X")).build(ui, &mut self.settings.camera_pos[0]) {
+            TabItem::new("Camera").build(ui, || {
+                ui.text("Camera pos");
+                if Drag::new("Camera X").build(ui, &mut self.settings.camera_pos[0]) {
                     render_sys.camera.position = self.settings.camera_pos;
                     self.view_projection = render_sys.get_view_projection(&self.settings);
                     update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
                 }
-                if Drag::new(im_str!("Camera Y")).build(ui, &mut self.settings.camera_pos[1]) {
+                if Drag::new("Camera Y").build(ui, &mut self.settings.camera_pos[1]) {
                     render_sys.camera.position = self.settings.camera_pos;
                     self.view_projection = render_sys.get_view_projection(&self.settings);
                     update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
                 }
-                if Drag::new(im_str!("Camera Z")).build(ui, &mut self.settings.camera_pos[2]) {
+                if Drag::new("Camera Z").build(ui, &mut self.settings.camera_pos[2]) {
                     render_sys.camera.position = self.settings.camera_pos;
                     self.view_projection = render_sys.get_view_projection(&self.settings);
                     update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
                 }
                 ui.separator();
-                ui.text(im_str!("Camera rotation"));
-                if AngleSlider::new(im_str!("Camera RX"))
-                    .range_degrees(-180.0..=180.0)
+                ui.text("Camera rotation");
+                if AngleSlider::new("Camera RX")
+                    .range_degrees(-180.0, 180.0)
                     .build(ui, &mut self.settings.camera_angle[0])
                 {
                     camera_helper::set_camera_angle(
@@ -277,8 +270,8 @@ impl App {
                     self.view_projection = render_sys.get_view_projection(&self.settings);
                     update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
                 }
-                if AngleSlider::new(im_str!("Camera RY"))
-                    .range_degrees(-180.0..=180.0)
+                if AngleSlider::new("Camera RY")
+                    .range_degrees(-180.0, 180.0)
                     .build(ui, &mut self.settings.camera_angle[1])
                 {
                     camera_helper::set_camera_angle(
@@ -288,8 +281,8 @@ impl App {
                     self.view_projection = render_sys.get_view_projection(&self.settings);
                     update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
                 }
-                if AngleSlider::new(im_str!("Camera RZ"))
-                    .range_degrees(-180.0..=180.0)
+                if AngleSlider::new("Camera RZ")
+                    .range_degrees(-180.0, 180.0)
                     .build(ui, &mut self.settings.camera_angle[2])
                 {
                     camera_helper::set_camera_angle(
@@ -300,23 +293,23 @@ impl App {
                     update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
                 }
                 ui.separator();
-                ui.text(im_str!("Camera perspective"));
-                if AngleSlider::new(im_str!("FOV"))
-                    .range_degrees(0.0..=180.0)
+                ui.text("Camera perspective");
+                if AngleSlider::new("FOV")
+                    .range_degrees(0.0, 180.0)
                     .build(ui, &mut self.settings.fov)
                 {
                     self.view_projection = render_sys.get_view_projection(&self.settings);
                     update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
                 }
-                if Drag::new(im_str!("Near clip"))
-                    .range(0.0..=f32::INFINITY)
+                if Drag::new("Near clip")
+                    .range(0.0, f32::INFINITY)
                     .build(ui, &mut self.settings.near_clip)
                 {
                     self.view_projection = render_sys.get_view_projection(&self.settings);
                     update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
                 }
-                if Drag::new(im_str!("Far clip"))
-                    .range(0.0..=f32::INFINITY)
+                if Drag::new("Far clip")
+                    .range(0.0, f32::INFINITY)
                     .build(ui, &mut self.settings.far_clip)
                 {
                     self.view_projection = render_sys.get_view_projection(&self.settings);
@@ -325,7 +318,7 @@ impl App {
             });
         });
 
-        if ui.small_button(im_str!("toggle source hidden")) {
+        if ui.small_button("toggle source hidden") {
             for source in self.sources.iter_mut() {
                 source.flag.set(
                     SourceFlag::HIDDEN,
@@ -334,8 +327,8 @@ impl App {
             }
             update_flag |= UpdateFlag::UPDATE_SOURCE_FLAG;
         }
-        ui.same_line(0.);
-        if ui.small_button(im_str!("toggle source enable")) {
+        ui.same_line();
+        if ui.small_button("toggle source enable") {
             for source in self.sources.iter_mut() {
                 source.flag.set(
                     SourceFlag::DISABLE,
@@ -346,7 +339,7 @@ impl App {
         }
 
         ui.separator();
-        if ui.small_button(im_str!("auto")) {
+        if ui.small_button("auto") {
             let rot = quaternion::euler_angles(
                 self.settings.slice_angle[0],
                 self.settings.slice_angle[1],
@@ -379,8 +372,8 @@ impl App {
             update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
         }
 
-        ui.same_line(0.);
-        if ui.small_button(im_str!("reset")) {
+        ui.same_line();
+        if ui.small_button("reset") {
             self.settings = ViewerSettings::default();
             self.reset(render_sys);
             update_flag = UpdateFlag::all();

@@ -4,7 +4,7 @@
  * Created Date: 29/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 28/07/2021
+ * Last Modified: 03/10/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -13,7 +13,7 @@
 
 use std::{mem::size_of, vec};
 
-use autd3_core::hardware_defined::{GainMode, RxGlobalControlFlags, RxGlobalHeader};
+use autd3_core::hardware_defined::{CPUControlFlags, GainMode, GlobalHeader};
 
 use crate::{
     autd_data::{AutdData, Gain, Geometry, Modulation},
@@ -50,23 +50,26 @@ impl Parser {
     pub fn parse(&mut self, raw_buf: Vec<u8>) -> Vec<AutdData> {
         let mut res = Vec::new();
 
-        let (cmd, ctrl_flag) = unsafe {
-            let header = raw_buf.as_ptr() as *const RxGlobalHeader;
-            ((*header).command, (*header).ctrl_flag)
+        let (cmd, ctrl_flag, cmd_flag) = unsafe {
+            let header = raw_buf.as_ptr() as *const GlobalHeader;
+            (
+                (*header).command,
+                (*header).ctrl_flag,
+                (*header).command_flag,
+            )
         };
 
-        res.push(AutdData::CtrlFlag(ctrl_flag));
+        res.push(AutdData::CtrlFlag(ctrl_flag, cmd_flag));
         match cmd {
             autd3_core::hardware_defined::CommandType::Clear => res.push(AutdData::Clear),
             autd3_core::hardware_defined::CommandType::Op => {
-                res.push(AutdData::Resume);
                 if let Some(modulation) = self.parse_as_modulation(&raw_buf) {
                     res.push(AutdData::Modulation(modulation));
                 }
 
-                if raw_buf.len() > size_of::<RxGlobalHeader>() {
+                if raw_buf.len() > size_of::<GlobalHeader>() {
                     let gain = Self::parse_as_gain(
-                        &raw_buf[size_of::<RxGlobalHeader>()..],
+                        &raw_buf[size_of::<GlobalHeader>()..],
                         GainMode::DutyPhaseFull,
                     );
 
@@ -90,24 +93,20 @@ impl Parser {
             autd3_core::hardware_defined::CommandType::PointSeqMode => {
                 if let Some(seq) = self.parse_as_point_sequence(&raw_buf) {
                     res.push(AutdData::PointSequence(seq));
-                    res.push(AutdData::Resume);
                 }
             }
             autd3_core::hardware_defined::CommandType::GainSeqMode => {
                 if let Some(seq) = self.parse_as_gain_sequence(&raw_buf) {
                     res.push(AutdData::GainSequence(seq));
-                    res.push(AutdData::Resume);
                 }
             }
             autd3_core::hardware_defined::CommandType::SetDelay => {
                 let delay_enable =
-                    Self::parse_as_delay_enable(&raw_buf[size_of::<RxGlobalHeader>()..]);
+                    Self::parse_as_delay_enable(&raw_buf[size_of::<GlobalHeader>()..]);
                 res.push(AutdData::DelayOffset(delay_enable));
             }
-            autd3_core::hardware_defined::CommandType::Pause => res.push(AutdData::Pause),
-            autd3_core::hardware_defined::CommandType::Resume => res.push(AutdData::Resume),
             autd3_core::hardware_defined::CommandType::EmulatorSetGeometry => {
-                let geo = Self::parse_as_geometry(&raw_buf[size_of::<RxGlobalHeader>()..]);
+                let geo = Self::parse_as_geometry(&raw_buf[size_of::<GlobalHeader>()..]);
                 res.push(AutdData::Geometries(geo))
             }
         }
@@ -128,12 +127,10 @@ impl Parser {
 
     fn parse_as_point_sequence(&mut self, buf: &[u8]) -> Option<PointSequence> {
         unsafe {
-            let header = buf.as_ptr() as *const RxGlobalHeader;
-            let seq_begin = (*header)
-                .ctrl_flag
-                .contains(RxGlobalControlFlags::SEQ_BEGIN);
-            let seq_end = (*header).ctrl_flag.contains(RxGlobalControlFlags::SEQ_END);
-            let cursor = buf.as_ptr().add(size_of::<RxGlobalHeader>()) as *const u16;
+            let header = buf.as_ptr() as *const GlobalHeader;
+            let seq_begin = (*header).command_flag.contains(CPUControlFlags::SEQ_BEGIN);
+            let seq_end = (*header).command_flag.contains(CPUControlFlags::SEQ_END);
+            let cursor = buf.as_ptr().add(size_of::<GlobalHeader>()) as *const u16;
             let seq_size = cursor.read();
             let offset = if seq_begin {
                 self.point_seq_buf = Some(vec![]);
@@ -169,12 +166,10 @@ impl Parser {
 
     fn parse_as_gain_sequence(&mut self, buf: &[u8]) -> Option<GainSequence> {
         unsafe {
-            let header = buf.as_ptr() as *const RxGlobalHeader;
-            let seq_begin = (*header)
-                .ctrl_flag
-                .contains(RxGlobalControlFlags::SEQ_BEGIN);
-            let seq_end = (*header).ctrl_flag.contains(RxGlobalControlFlags::SEQ_END);
-            let cursor = buf.as_ptr().add(size_of::<RxGlobalHeader>()) as *const u16;
+            let header = buf.as_ptr() as *const GlobalHeader;
+            let seq_begin = (*header).command_flag.contains(CPUControlFlags::SEQ_BEGIN);
+            let seq_end = (*header).command_flag.contains(CPUControlFlags::SEQ_END);
+            let cursor = buf.as_ptr().add(size_of::<GlobalHeader>()) as *const u16;
             if seq_begin {
                 self.gain_seq_buf = Some(vec![]);
                 self.seq_gain_mode = match cursor.read() {
@@ -190,7 +185,7 @@ impl Parser {
 
             if let Some(b) = &mut self.gain_seq_buf {
                 b.append(&mut Self::parse_as_gain(
-                    &buf[size_of::<RxGlobalHeader>()..],
+                    &buf[size_of::<GlobalHeader>()..],
                     self.seq_gain_mode,
                 ))
             }
@@ -218,12 +213,9 @@ impl Parser {
 
     fn parse_as_modulation(&mut self, buf: &[u8]) -> Option<Modulation> {
         unsafe {
-            let header = buf.as_ptr() as *const RxGlobalHeader;
+            let header = buf.as_ptr() as *const GlobalHeader;
             let mod_size = (*header).mod_size as usize;
-            let offset = if (*header)
-                .ctrl_flag
-                .contains(RxGlobalControlFlags::MOD_BEGIN)
-            {
+            let offset = if (*header).command_flag.contains(CPUControlFlags::MOD_BEGIN) {
                 self.mod_buf = Some(vec![]);
                 self.mod_div = u16::from_ne_bytes([(*header).mod_data[0], (*header).mod_data[1]]);
                 2
@@ -234,7 +226,7 @@ impl Parser {
                 buf.extend_from_slice(&(*header).mod_data[offset..(offset + mod_size)]);
             }
 
-            if (*header).ctrl_flag.contains(RxGlobalControlFlags::MOD_END) {
+            if (*header).command_flag.contains(CPUControlFlags::MOD_END) {
                 Some(Modulation {
                     mod_div: self.mod_div,
                     mod_data: self.mod_buf.take().unwrap(),
