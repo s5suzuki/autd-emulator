@@ -14,13 +14,13 @@
 use std::collections::VecDeque;
 
 #[derive(Clone)]
-pub struct LPF {
+pub struct Lpf {
     coef: Vec<f32>,
     duty_buf: VecDeque<f32>,
     phase_buf: VecDeque<f32>,
 }
 
-impl LPF {
+impl Lpf {
     pub fn new() -> Self {
         let coef = vec![
             -0.0000000, 0.0000011, 0.0000044, 0.0000098, 0.0000175, 0.0000275, 0.0000397,

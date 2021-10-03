@@ -13,9 +13,9 @@
 
 use crate::consts::CYCLE;
 
-pub struct PWM {}
+pub struct Pwm {}
 
-impl PWM {
+impl Pwm {
     pub fn output(time: u16, duty: u8, phase: u8, duty_offset: u8) -> f64 {
         let d = duty as u16 + duty_offset as u16;
         let p = (0xFF - phase as u16) << 1;

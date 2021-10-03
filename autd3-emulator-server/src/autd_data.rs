@@ -4,7 +4,7 @@
  * Created Date: 07/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 28/07/2021
+ * Last Modified: 03/10/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -13,7 +13,7 @@
 
 use acoustic_field_viewer::sound_source::SoundSource;
 use autd3_core::hardware_defined::{
-    GainMode, RxGlobalControlFlags, NUM_TRANS_X, NUM_TRANS_Y, TRANS_SPACING_MM,
+    CPUControlFlags, FPGAControlFlags, GainMode, NUM_TRANS_X, NUM_TRANS_Y, TRANS_SPACING_MM,
 };
 
 use crate::Vector3;
@@ -100,10 +100,8 @@ pub enum AutdData {
     Modulation(Modulation),
     Gain(Gain),
     Geometries(Vec<Geometry>),
-    CtrlFlag(RxGlobalControlFlags),
+    CtrlFlag(FPGAControlFlags, CPUControlFlags),
     Clear,
-    Pause,
-    Resume,
     RequestFpgaVerMsb,
     RequestFpgaVerLsb,
     RequestCpuVerMsb,

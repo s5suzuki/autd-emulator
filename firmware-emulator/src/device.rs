@@ -4,7 +4,7 @@
  * Created Date: 19/09/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 19/09/2021
+ * Last Modified: 03/10/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -19,8 +19,8 @@ use crate::{
     consts::{CYCLE, TIME_STEP},
     delayed_fifo::DelayedFifo,
     modulator::Modulator,
-    pwm::PWM,
-    silent_lpf::LPF,
+    pwm::Pwm,
+    silent_lpf::Lpf,
     transducer::Transducer,
 };
 
@@ -37,7 +37,7 @@ pub struct Device {
     modulator: Modulator,
     delayed_fifo: Vec<DelayedFifo>,
     silent_mode: bool,
-    silent_lpf: Vec<LPF>,
+    silent_lpf: Vec<Lpf>,
 }
 
 impl Device {
@@ -58,7 +58,7 @@ impl Device {
             modulator: Modulator::new(),
             delayed_fifo: vec![DelayedFifo::new(); NUM_TRANS_IN_UNIT],
             silent_mode: true,
-            silent_lpf: vec![LPF::new(); NUM_TRANS_IN_UNIT],
+            silent_lpf: vec![Lpf::new(); NUM_TRANS_IN_UNIT],
         }
     }
 
@@ -79,8 +79,8 @@ impl Device {
     }
 
     pub fn set_delay(&mut self, delay: &[u8]) {
-        for i in 0..NUM_TRANS_IN_UNIT {
-            self.delayed_fifo[i].set(delay[i]);
+        for (i, &d) in delay.iter().enumerate().take(NUM_TRANS_IN_UNIT) {
+            self.delayed_fifo[i].set(d);
         }
     }
 
@@ -106,7 +106,7 @@ impl Device {
         }
 
         for i in 0..NUM_TRANS_IN_UNIT {
-            let v = PWM::output(
+            let v = Pwm::output(
                 self.time,
                 self.current_duties[i],
                 self.current_phases[i],

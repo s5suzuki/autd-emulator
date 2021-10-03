@@ -12,15 +12,14 @@
 */
 
 use acoustic_field_viewer::view::UpdateFlag;
-use imgui::ImString;
 
 use crate::settings::Setting;
 pub use std::path::Path;
 
 pub struct OffscreenRenderSystem {
     pub(crate) offscreen_renderer: offscreen_renderer::OffscreenRenderer,
-    pub(crate) save_path: ImString,
-    pub(crate) record_path: ImString,
+    pub(crate) save_path: String,
+    pub(crate) record_path: String,
     pub(crate) recording: bool,
     pub(crate) update_flag_for_save: UpdateFlag,
 }
@@ -29,8 +28,8 @@ impl OffscreenRenderSystem {
     pub fn new(setting: &Setting) -> Self {
         Self {
             offscreen_renderer: offscreen_renderer::OffscreenRenderer::new(),
-            save_path: ImString::new(&setting.save_file_path),
-            record_path: ImString::new(&setting.record_path),
+            save_path: setting.save_file_path.clone(),
+            record_path: setting.record_path.clone(),
             recording: false,
             update_flag_for_save: UpdateFlag::all(),
         }
