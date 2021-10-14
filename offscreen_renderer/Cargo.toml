@@ -1,13 +1,13 @@
 [package]
 name = "offscreen-renderer"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-vulkano = "0.25.0"
-vulkano-shaders = "0.25.0"
+vulkano = "0.26.0"
+vulkano-shaders = "0.26.0"
 acoustic_field_viewer = {path="../acoustic_field_viewer"}
 vecmath = "1.0.0"
 vecmath_util = {path="../vecmath_util"}

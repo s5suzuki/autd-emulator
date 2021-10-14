@@ -4,7 +4,7 @@
  * Created Date: 06/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 03/10/2021
+ * Last Modified: 15/10/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -919,7 +919,7 @@ impl App {
                     ui.checkbox_flags("SEQ MODE", &mut flag, FPGAControlFlags::SEQ_MODE);
 
                     ui.separator();
-                    ui.text("FPGA flag");
+                    ui.text("CPU flag");
                     let mut flag = self.cpu_flag;
                     ui.checkbox_flags("MOD BEGIN", &mut flag, CPUControlFlags::MOD_BEGIN);
                     ui.checkbox_flags("MOD END", &mut flag, CPUControlFlags::MOD_END);
@@ -930,6 +930,7 @@ impl App {
                         &mut flag,
                         CPUControlFlags::READS_FPGA_INFO,
                     );
+                    ui.checkbox_flags("WRITE BODY", &mut flag, CPUControlFlags::WRITE_BODY);
                 });
                 TabItem::new("Log").build(ui, || {
                     if ui.radio_button_bool("enable", self.setting.log_enable) {
