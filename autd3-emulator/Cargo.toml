@@ -1,6 +1,6 @@
 [package]
 name = "autd-emulator"
-version = "0.6.1"
+version = "0.6.2"
 authors = ["shun suzuki <suzuki@hapis.k.u-tokyo.ac.jp>"]
 edition = "2018"
 
@@ -8,7 +8,7 @@ edition = "2018"
 
 [dependencies]
 acoustic_field_viewer = {path="../acoustic_field_viewer"}
-autd3-core = "1.8.0"
+autd3-core = "1.9.0"
 autd3_emulator_server = {path="../autd3-emulator-server"}
 camera_controllers = "0.32.0"
 chrono = "0.4.19"

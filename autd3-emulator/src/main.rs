@@ -4,7 +4,7 @@
  * Created Date: 06/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 07/10/2021
+ * Last Modified: 15/10/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -930,6 +930,7 @@ impl App {
                         &mut flag,
                         CPUControlFlags::READS_FPGA_INFO,
                     );
+                    ui.checkbox_flags("WRITE BODY", &mut flag, CPUControlFlags::WRITE_BODY);
                 });
                 TabItem::new("Log").build(ui, || {
                     if ui.radio_button_bool("enable", self.setting.log_enable) {

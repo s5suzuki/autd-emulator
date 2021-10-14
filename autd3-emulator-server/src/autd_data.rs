@@ -4,7 +4,7 @@
  * Created Date: 07/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 03/10/2021
+ * Last Modified: 15/10/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -22,7 +22,7 @@ use crate::Vector3;
 #[derive(Debug)]
 pub struct Modulation {
     pub mod_data: Vec<u8>,
-    pub mod_div: u16,
+    pub mod_div: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -71,7 +71,7 @@ impl SeqFocus {
 
 #[derive(Debug)]
 pub struct PointSequence {
-    pub seq_div: u16,
+    pub seq_div: u32,
     pub seq_data: Vec<(Vector3, u8)>,
     pub wavelength: u16,
 }
@@ -79,7 +79,7 @@ pub struct PointSequence {
 #[derive(Debug)]
 pub struct GainSequence {
     pub gain_mode: GainMode,
-    pub seq_div: u16,
+    pub seq_div: u32,
     pub seq_data: Vec<Gain>,
 }
 

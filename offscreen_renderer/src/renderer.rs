@@ -4,7 +4,7 @@
  * Created Date: 10/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 07/09/2021
+ * Last Modified: 15/10/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -28,7 +28,7 @@ use vulkano::{
         Device, DeviceExtensions, Features, Queue,
     },
     instance::{Instance, InstanceExtensions},
-    pipeline::{ComputePipeline, ComputePipelineAbstract},
+    pipeline::{ComputePipeline, PipelineBindPoint},
     sync::{self, GpuFuture},
     Version,
 };
@@ -117,6 +117,7 @@ impl OffscreenRenderer {
                 &shader.main_entry_point(),
                 &(),
                 None,
+                |_| {},
             )
             .unwrap()
         });
@@ -262,47 +263,31 @@ impl OffscreenRenderer {
         let source_amp_buffer = self.source_amp_buf.clone().unwrap();
         let source_phase_buffer = self.source_phase_buf.clone().unwrap();
 
-        let set_0 = Arc::new(
-            PersistentDescriptorSet::start(pipeline.layout().descriptor_set_layouts()[0].clone())
-                .add_buffer(res_buffer)
-                .unwrap()
-                .build()
-                .unwrap(),
-        );
+        let layout = pipeline.layout().descriptor_set_layouts().get(0).unwrap();
+        let mut set_builder = PersistentDescriptorSet::start(layout.clone());
+        set_builder.add_buffer(res_buffer).unwrap();
+        let set_0 = Arc::new(set_builder.build().unwrap());
 
-        let set_1 = Arc::new(
-            PersistentDescriptorSet::start(pipeline.layout().descriptor_set_layouts()[1].clone())
-                .add_buffer(config_buffer)
-                .unwrap()
-                .build()
-                .unwrap(),
-        );
+        let layout = pipeline.layout().descriptor_set_layouts().get(1).unwrap();
+        let mut set_builder = PersistentDescriptorSet::start(layout.clone());
+        set_builder.add_buffer(config_buffer).unwrap();
+        let set_1 = Arc::new(set_builder.build().unwrap());
 
-        let set_2 = Arc::new(
-            PersistentDescriptorSet::start(pipeline.layout().descriptor_set_layouts()[2].clone())
-                .add_buffer(source_pos_buffer)
-                .unwrap()
-                .build()
-                .unwrap(),
-        );
+        let layout = pipeline.layout().descriptor_set_layouts().get(2).unwrap();
+        let mut set_builder = PersistentDescriptorSet::start(layout.clone());
+        set_builder.add_buffer(source_pos_buffer).unwrap();
+        let set_2 = Arc::new(set_builder.build().unwrap());
 
-        let set_3 = Arc::new(
-            PersistentDescriptorSet::start(pipeline.layout().descriptor_set_layouts()[3].clone())
-                .add_buffer(source_phase_buffer)
-                .unwrap()
-                .add_buffer(source_amp_buffer)
-                .unwrap()
-                .build()
-                .unwrap(),
-        );
+        let layout = pipeline.layout().descriptor_set_layouts().get(3).unwrap();
+        let mut set_builder = PersistentDescriptorSet::start(layout.clone());
+        set_builder.add_buffer(source_phase_buffer).unwrap();
+        set_builder.add_buffer(source_amp_buffer).unwrap();
+        let set_3 = Arc::new(set_builder.build().unwrap());
 
-        let set_4 = Arc::new(
-            PersistentDescriptorSet::start(pipeline.layout().descriptor_set_layouts()[4].clone())
-                .add_buffer(points_buffer)
-                .unwrap()
-                .build()
-                .unwrap(),
-        );
+        let layout = pipeline.layout().descriptor_set_layouts().get(4).unwrap();
+        let mut set_builder = PersistentDescriptorSet::start(layout.clone());
+        set_builder.add_buffer(points_buffer).unwrap();
+        let set_4 = Arc::new(set_builder.build().unwrap());
 
         let mut builder = AutoCommandBufferBuilder::primary(
             self.device.clone(),
@@ -311,12 +296,14 @@ impl OffscreenRenderer {
         )
         .unwrap();
         builder
-            .dispatch(
-                [num_x, num_y, 1],
-                pipeline,
+            .bind_pipeline_compute(pipeline.clone())
+            .bind_descriptor_sets(
+                PipelineBindPoint::Compute,
+                pipeline.layout().clone(),
+                0,
                 (set_0, set_1, set_2, set_3, set_4),
-                (),
             )
+            .dispatch([num_x, num_y, 1])
             .unwrap();
         let command_buffer = builder.build().unwrap();
 
