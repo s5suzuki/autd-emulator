@@ -4,14 +4,14 @@
  * Created Date: 05/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 16/09/2021
+ * Last Modified: 03/12/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
  *
  */
 
-use acoustic_field_viewer::view::{render_system::RenderSystem, ViewerSettings};
+use acoustic_field_viewer::{renderer::Renderer, ViewerSettings};
 use serde::{Deserialize, Serialize};
 use std::{
     fs::{File, OpenOptions},
@@ -69,9 +69,9 @@ impl Setting {
         }
     }
 
-    pub fn merge_render_sys(&mut self, render_sys: &RenderSystem) {
-        let scale_factor = render_sys.window().scale_factor();
-        let size = render_sys.window().inner_size().to_logical(scale_factor);
+    pub fn merge_render_sys(&mut self, renderer: &Renderer) {
+        let scale_factor = renderer.window().scale_factor();
+        let size = renderer.window().inner_size().to_logical(scale_factor);
         self.window_width = size.width;
         self.window_height = size.height;
     }

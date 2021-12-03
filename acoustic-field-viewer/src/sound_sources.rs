@@ -53,6 +53,12 @@ impl SoundSources {
         self.drive.push(drive);
     }
 
+    pub fn clear(&mut self) {
+        self.pos.clear();
+        self.dir.clear();
+        self.drive.clear();
+    }
+
     pub fn len(&self) -> usize {
         self.pos.len()
     }

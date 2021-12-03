@@ -244,7 +244,7 @@ impl FieldComputePipeline {
                 self.queue.device().clone(),
                 BufferUsage::all(),
                 false,
-                sources.drives().map(|d| *d),
+                sources.drives().copied(),
             )
             .unwrap(),
         );
