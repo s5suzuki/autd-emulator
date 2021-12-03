@@ -4,14 +4,15 @@
  * Created Date: 10/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 10/07/2021
+ * Last Modified: 01/12/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
  * 
  */
 
-#version 450
+#version 450 core
+
 #include "cpressure_base.comp"
 
-MAIN_FROM_COMPLEX_VALUE(result.data[oi] = sqrt(re*re+im*im)/config.color_scale;)
+MAIN_FROM_COMPLEX_VALUE(sqrt(re*re+im*im))

@@ -4,14 +4,14 @@
  * Created Date: 05/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 16/09/2021
+ * Last Modified: 03/12/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
  *
  */
 
-use acoustic_field_viewer::view::{render_system::RenderSystem, ViewerSettings};
+use acoustic_field_viewer::{renderer::Renderer, ViewerSettings};
 use serde::{Deserialize, Serialize};
 use std::{
     fs::{File, OpenOptions},
@@ -24,7 +24,6 @@ pub struct Setting {
     pub port: u16,
     pub window_width: u32,
     pub window_height: u32,
-    pub camera_move_speed: f32,
     pub viewer_setting: ViewerSettings,
     pub log_enable: bool,
     pub log_max: u32,
@@ -44,7 +43,6 @@ impl Setting {
             port: 50632,
             window_width: 960,
             window_height: 640,
-            camera_move_speed: 10.0,
             viewer_setting: ViewerSettings::new(),
             log_enable: true,
             log_max: 100,
@@ -69,9 +67,9 @@ impl Setting {
         }
     }
 
-    pub fn merge_render_sys(&mut self, render_sys: &RenderSystem) {
-        let scale_factor = render_sys.window().scale_factor();
-        let size = render_sys.window().inner_size().to_logical(scale_factor);
+    pub fn merge_render_sys(&mut self, renderer: &Renderer) {
+        let scale_factor = renderer.window().scale_factor();
+        let size = renderer.window().inner_size().to_logical(scale_factor);
         self.window_width = size.width;
         self.window_height = size.height;
     }
@@ -96,5 +94,11 @@ impl Setting {
             .open(path)
             .unwrap();
         writeln!(&mut file, "{}", json).unwrap();
+    }
+}
+
+impl Default for Setting {
+    fn default() -> Self {
+        Self::new()
     }
 }

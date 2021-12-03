@@ -1,15 +1,15 @@
 /*
-* File: camera_helper.rs
-* Project: src
-* Created Date: 10/07/2021
-* Author: Shun Suzuki
-* -----
-* Last Modified: 10/07/2021
-* Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
-* -----
-* Copyright (c) 2021 Hapis Lab. All rights reserved.
-*
-*/
+ * File: camera_helper.rs
+ * Project: src
+ * Created Date: 26/11/2021
+ * Author: Shun Suzuki
+ * -----
+ * Last Modified: 26/11/2021
+ * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
+ * -----
+ * Copyright (c) 2021 Hapis Lab. All rights reserved.
+ *
+ */
 
 use camera_controllers::Camera;
 

@@ -1,35 +1,35 @@
-#version 150 core
+/*
+ * File: slice.frag
+ * Project: shaders
+ * Created Date: 26/11/2021
+ * Author: Shun Suzuki
+ * -----
+ * Last Modified: 03/12/2021
+ * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
+ * -----
+ * Copyright (c) 2021 Hapis Lab. All rights reserved.
+ * 
+ */
 
-in vec3 v_gpos;
-out vec4 o_Color;
+#version 450
 
-uniform float u_wavenum;
-uniform float u_color_scale;
-uniform float u_trans_num;
-uniform sampler1D u_color_map;
-uniform sampler1D u_trans_pos;
-uniform sampler1D u_trans_drive;
+layout(location = 0) in vec2 v_tex_coords;
 
-const float PI = 3.141592653589793;
+layout(location = 0) out vec4 f_color;
 
-vec4 coloring(float t)
-{
-  return texture(u_color_map, clamp(t, 0.0, 1.0));
-}
+layout(set = 0, binding = 1) buffer Config {
+    uint width;
+    uint height;
+    uint dummy_0;
+    uint dummy_1;
+} config;
+layout(set = 0, binding = 2) buffer Data {
+    vec4 data[];
+} data;
 
 void main() {
-    float re = 0.0;
-    float im = 0.0;
-    for(float idx = 0.0; idx < 65536.0; idx++){
-        if (idx >= u_trans_num) break;
-        vec3 tp = texture(u_trans_pos, (idx+0.5) / u_trans_num).xyz;
-        float d = length(v_gpos - tp);
-        vec2 p_amp = texture(u_trans_drive, (idx+0.5) / u_trans_num).xy;
-        float p = -2.0*PI*p_amp.x;
-        float amp = p_amp.y / d;
-        im += amp * cos(p - u_wavenum*d);
-        re += amp * sin(p - u_wavenum*d);
-    }
-    float c = sqrt(re*re+im*im);
-    o_Color = coloring(c/u_color_scale);
+  uint w = uint(floor(v_tex_coords.x * config.width));
+  uint h = uint(floor(v_tex_coords.y * config.height));
+  uint idx = w + config.width * h;
+  f_color = data.data[idx];
 }
