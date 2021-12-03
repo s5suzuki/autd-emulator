@@ -24,7 +24,6 @@ pub struct Setting {
     pub port: u16,
     pub window_width: u32,
     pub window_height: u32,
-    pub camera_move_speed: f32,
     pub viewer_setting: ViewerSettings,
     pub log_enable: bool,
     pub log_max: u32,
@@ -44,7 +43,6 @@ impl Setting {
             port: 50632,
             window_width: 960,
             window_height: 640,
-            camera_move_speed: 10.0,
             viewer_setting: ViewerSettings::new(),
             log_enable: true,
             log_max: 100,
@@ -96,5 +94,11 @@ impl Setting {
             .open(path)
             .unwrap();
         writeln!(&mut file, "{}", json).unwrap();
+    }
+}
+
+impl Default for Setting {
+    fn default() -> Self {
+        Self::new()
     }
 }

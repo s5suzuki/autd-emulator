@@ -134,6 +134,7 @@ impl SliceViewer {
                 settings.slice_width / settings.slice_pixel_size,
                 settings.slice_height / settings.slice_pixel_size,
             ];
+            self.field_image_view = Self::create_field_image_view(renderer, self.slice_size);
         }
 
         if update_flag.contains(UpdateFlag::UPDATE_CAMERA_POS) {
@@ -205,7 +206,7 @@ impl SliceViewer {
         renderer: &Renderer,
         view_size: [u32; 2],
     ) -> Arc<CpuAccessibleBuffer<[Vector4]>> {
-        let data_iter = vec![[0., 0., 0., 0.]; view_size[0] as usize * view_size[1] as usize];
+        let data_iter = vec![[0., 0., 0., 1.]; view_size[0] as usize * view_size[1] as usize];
         CpuAccessibleBuffer::from_iter(
             renderer.device(),
             BufferUsage {

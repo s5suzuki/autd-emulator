@@ -13,7 +13,7 @@
 
 mod settings;
 
-use std::{collections::VecDeque, f32::consts::PI, time::Instant};
+use std::{collections::VecDeque, f32::consts::PI, path::Path, time::Instant};
 
 use acoustic_field_viewer::{
     camera_helper,
@@ -70,6 +70,8 @@ struct App {
     last_frame_fps: Instant,
     frame_count: usize,
     fps: f64,
+    save_image: bool,
+    recording: bool,
 }
 
 impl App {
@@ -104,6 +106,8 @@ impl App {
             last_frame_fps: std::time::Instant::now(),
             frame_count: 0,
             fps: 0.0,
+            save_image: false,
+            recording: false,
         }
     }
 
@@ -128,7 +132,7 @@ impl App {
         )
         .unwrap();
 
-        let clear_values = vec![[0.3, 0.3, 0.3, 1.0].into(), 1f32.into()];
+        let clear_values = vec![self.setting.viewer_setting.background.into(), 1f32.into()];
         builder
             .begin_render_pass(framebuffer, SubpassContents::Inline, clear_values)
             .unwrap()
@@ -139,20 +143,6 @@ impl App {
         self.dir_viewer.render(&mut builder);
         builder.end_render_pass().unwrap();
         let command_buffer = builder.build().unwrap();
-
-        let filed_image = self.slice_viewer.field_image_view();
-        let after_compute = self
-            .field_compute_pipeline
-            .compute(
-                filed_image,
-                self.slice_viewer.model(),
-                &self.sources,
-                &self.setting.viewer_setting,
-            )
-            .join(before_future);
-        let slice_future = after_compute
-            .then_execute(renderer.queue(), command_buffer)
-            .unwrap();
 
         let mut update_flag = self.handle_autd(autd_server);
         update_flag |= self.update_camera(renderer, imgui.io());
@@ -178,6 +168,35 @@ impl App {
         update_flag |= self.update_ui(&ui, renderer);
         self.update_view(renderer, update_flag);
 
+        let update_field = update_flag.contains(UpdateFlag::INIT_SOURCE)
+            || update_flag.contains(UpdateFlag::UPDATE_COLOR_MAP)
+            || update_flag.contains(UpdateFlag::UPDATE_SLICE_POS)
+            || update_flag.contains(UpdateFlag::UPDATE_SLICE_SIZE)
+            || update_flag.contains(UpdateFlag::UPDATE_SOURCE_DRIVE)
+            || update_flag.contains(UpdateFlag::UPDATE_SOURCE_FLAG)
+            || update_flag.contains(UpdateFlag::UPDATE_WAVENUM);
+
+        let filed_image = self.slice_viewer.field_image_view();
+        let slice_future = if update_field {
+            let after_compute = self
+                .field_compute_pipeline
+                .compute(
+                    filed_image,
+                    self.slice_viewer.model(),
+                    &self.sources,
+                    &self.setting.viewer_setting,
+                )
+                .join(before_future);
+            after_compute
+                .then_execute(renderer.queue(), command_buffer)
+                .unwrap()
+                .boxed()
+        } else {
+            before_future
+                .then_execute(renderer.queue(), command_buffer)
+                .unwrap()
+                .boxed()
+        };
         let mut cmd_buf_builder = AutoCommandBufferBuilder::primary(
             renderer.device(),
             renderer.queue().family(),
@@ -395,7 +414,7 @@ impl App {
         if !io.want_capture_mouse && mouse_wheel != 0.0 {
             let trans = vecmath::vec3_scale(
                 renderer.camera.forward,
-                -mouse_wheel * self.setting.camera_move_speed,
+                -mouse_wheel * self.setting.viewer_setting.camera_move_speed,
             );
             self.setting.viewer_setting.camera_pos =
                 vecmath::vec3_add(self.setting.viewer_setting.camera_pos, trans);
@@ -406,8 +425,10 @@ impl App {
         let mouse_delta = io.mouse_delta;
         if !io.want_capture_mouse && io.mouse_down[0] && !vecmath_util::is_zero(&mouse_delta) {
             if io.key_shift {
-                let mouse_delta =
-                    vecmath::vec2_scale(mouse_delta, self.setting.camera_move_speed / 3000.0);
+                let mouse_delta = vecmath::vec2_scale(
+                    mouse_delta,
+                    self.setting.viewer_setting.camera_move_speed / 3000.0,
+                );
                 let trans_x = vecmath::vec3_scale(renderer.camera.right, mouse_delta[0]);
                 let trans_y = vecmath::vec3_scale(renderer.camera.up, -mouse_delta[1]);
                 let to =
@@ -425,8 +446,10 @@ impl App {
                 self.setting.viewer_setting.camera_angle =
                     camera_helper::rot_mat_to_euler_angles(&rotm);
             } else {
-                let mouse_delta =
-                    vecmath::vec2_scale(mouse_delta, self.setting.camera_move_speed / 10.0);
+                let mouse_delta = vecmath::vec2_scale(
+                    mouse_delta,
+                    self.setting.viewer_setting.camera_move_speed / 10.0,
+                );
                 let trans_x = vecmath::vec3_scale(renderer.camera.right, -mouse_delta[0]);
                 let trans_y = vecmath::vec3_scale(renderer.camera.up, mouse_delta[1]);
                 let trans = vecmath::vec3_add(trans_x, trans_y);
@@ -443,17 +466,23 @@ impl App {
 
     fn update_ui(&mut self, ui: &Ui, renderer: &mut Renderer) -> UpdateFlag {
         let mut update_flag = UpdateFlag::empty();
+        self.save_image = false;
         Window::new("Controller").build(ui, || {
             TabBar::new("Settings").build(ui, || {
                 TabItem::new("Slice").build(ui, || {
                     ui.text("Slice size");
-                    if Slider::new("Slice width", 0, 1000)
+                    if Slider::new("Slice width", 1, 1000)
                         .build(ui, &mut self.setting.viewer_setting.slice_width)
                     {
                         update_flag |= UpdateFlag::UPDATE_SLICE_SIZE;
                     }
-                    if Slider::new("Slice heigh", 0, 1000)
+                    if Slider::new("Slice heigh", 1, 1000)
                         .build(ui, &mut self.setting.viewer_setting.slice_height)
+                    {
+                        update_flag |= UpdateFlag::UPDATE_SLICE_SIZE;
+                    }
+                    if Slider::new("Pixel size", 1, 8)
+                        .build(ui, &mut self.setting.viewer_setting.slice_pixel_size)
                     {
                         update_flag |= UpdateFlag::UPDATE_SLICE_SIZE;
                     }
@@ -613,7 +642,7 @@ impl App {
                     Drag::new("camera speed")
                         .range(0.0, f32::INFINITY)
                         .speed(0.1)
-                        .build(ui, &mut self.setting.camera_move_speed);
+                        .build(ui, &mut self.setting.viewer_setting.camera_move_speed);
 
                     ui.separator();
                     ui.text("Camera perspective");
@@ -891,6 +920,23 @@ impl App {
             });
 
             ui.separator();
+            ui.text("Save as file");
+            InputText::new(ui, "path to image", &mut self.setting.save_file_path).build();
+            if ui.small_button("save") {
+                self.save_image = true;
+            }
+
+            ui.separator();
+            InputText::new(ui, "path to recorded images", &mut self.setting.record_path).build();
+            if ui.small_button(if self.recording {
+                "stop recording"
+            } else {
+                "record"
+            }) {
+                self.recording = !self.recording;
+            }
+
+            ui.separator();
 
             if ui.small_button("auto") {
                 let rot = quaternion::euler_angles(
@@ -933,18 +979,42 @@ impl App {
 
             ui.same_line();
             if ui.small_button("reset") {
-                self.setting = Setting::load("setting.json");
+                let show = self.setting.show.to_owned();
+                let enable = self.setting.enable.to_owned();
+                let show_axis = self.setting.show_axis.to_owned();
+                self.setting = Setting {
+                    show,
+                    enable,
+                    show_axis,
+                    ..Setting::load("setting.json")
+                };
                 self.reset(renderer);
                 update_flag = UpdateFlag::all();
             }
 
             ui.same_line();
             if ui.small_button("default") {
-                let default_setting = acoustic_field_viewer::ViewerSettings {
+                let viewer_setting = acoustic_field_viewer::ViewerSettings {
                     wave_length: self.setting.viewer_setting.wave_length,
+                    vsync: self.setting.viewer_setting.vsync,
                     ..Default::default()
                 };
-                self.setting.viewer_setting = default_setting;
+                let show = self.setting.show.to_owned();
+                let enable = self.setting.enable.to_owned();
+                let show_axis = self.setting.show_axis.to_owned();
+                let port = self.setting.port;
+                let window_width = self.setting.window_width;
+                let window_height = self.setting.window_height;
+                self.setting = Setting {
+                    port,
+                    window_width,
+                    window_height,
+                    viewer_setting,
+                    show,
+                    enable,
+                    show_axis,
+                    ..Setting::new()
+                };
                 self.reset(renderer);
                 update_flag = UpdateFlag::all();
             }
@@ -1092,6 +1162,47 @@ pub fn main() {
                 before_pipeline_future,
             );
             renderer.finish_frame(after_future);
+
+            if app.save_image || app.recording {
+                let image = app.slice_viewer.field_image_view();
+                let result = image.read().unwrap();
+
+                use image::png::PngEncoder;
+                use image::ColorType;
+                use std::fs::File;
+
+                let width = app.setting.viewer_setting.slice_width
+                    / app.setting.viewer_setting.slice_pixel_size;
+                let height = app.setting.viewer_setting.slice_height
+                    / app.setting.viewer_setting.slice_pixel_size;
+                let pixels: Vec<_> = (&result[0..(width as usize * height as usize)])
+                    .chunks_exact(width as _)
+                    .rev()
+                    .flatten()
+                    .map(|&c| vecmath_util::vec4_map(c, |v| (v * 255.0) as u8))
+                    .flatten()
+                    .collect();
+
+                if app.save_image {
+                    let output = File::create(&app.setting.save_file_path).unwrap();
+                    let encoder = PngEncoder::new(output);
+                    encoder
+                        .encode(&pixels, width, height, ColorType::Rgba8)
+                        .unwrap();
+                }
+
+                if app.recording {
+                    std::fs::create_dir_all(&app.setting.record_path).unwrap();
+                    let date = chrono::Local::now();
+                    let path = Path::new(&app.setting.record_path)
+                        .join(format!("{}", date.format("%Y-%m-%d_%H-%M-%S_%3f.png")));
+                    let output = File::create(path).unwrap();
+                    let encoder = PngEncoder::new(output);
+                    encoder
+                        .encode(&pixels, width, height, ColorType::Rgba8)
+                        .unwrap();
+                }
+            }
         });
     }
 
