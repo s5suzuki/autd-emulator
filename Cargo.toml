@@ -1,9 +1,9 @@
 [workspace]
 
 members = [
-    "acoustic_field_viewer",
+    "acoustic-field-viewer",
     "autd3-emulator",
     "autd3-emulator-server",
-    "vecmath_util",
+    "vecmath-util",
     "firmware-emulator"
 ]

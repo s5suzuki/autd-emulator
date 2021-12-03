@@ -7,9 +7,9 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-acoustic_field_viewer = {path="../acoustic_field_viewer"}
+acoustic-field-viewer = {path="../acoustic-field-viewer"}
 autd3-core = "1.9.0"
-autd3_emulator_server = {path="../autd3-emulator-server"}
+autd3-emulator-server = {path="../autd3-emulator-server"}
 camera_controllers = "0.32.0"
 chrono = "0.4.19"
 find_folder = "0.3.0"
@@ -28,4 +28,4 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 shader_version = "0.7.0"
 vecmath = "1.0.0"
-vecmath_util = {path="../vecmath_util"}
+vecmath-util = {path="../vecmath-util"}
