@@ -4,7 +4,7 @@
  * Created Date: 29/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 15/10/2021
+ * Last Modified: 13/12/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -13,7 +13,7 @@
 
 use std::{mem::size_of, vec};
 
-use autd3_core::hardware_defined::{CPUControlFlags, GainMode, GlobalHeader};
+use autd3_core::hardware_defined::{CPUControlFlags, GainMode, GlobalHeader, NUM_TRANS_IN_UNIT};
 
 use crate::{
     autd_data::{AutdData, Gain, Geometry, Modulation},
@@ -108,7 +108,7 @@ impl Parser {
 
     fn parse_as_geometry(buf: &[u8]) -> Vec<Geometry> {
         let mut res = Vec::new();
-        for bytes in buf.chunks_exact(std::mem::size_of::<Geometry>()) {
+        for bytes in buf.chunks_exact(std::mem::size_of::<u16>() * NUM_TRANS_IN_UNIT) {
             let origin = to_vec3(&bytes[0..12]);
             let right = to_vec3(&bytes[12..24]);
             let up = to_vec3(&bytes[24..36]);
