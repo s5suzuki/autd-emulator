@@ -4,7 +4,7 @@
  * Created Date: 29/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 13/12/2021
+ * Last Modified: 14/12/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -30,6 +30,7 @@ pub struct Parser {
     gain_seq_div: u16,
     seq_gain_mode: GainMode,
     gain_seq_size: usize,
+    last_msg_id: u8,
 }
 
 impl Parser {
@@ -44,6 +45,7 @@ impl Parser {
             gain_seq_div: 0,
             seq_gain_mode: GainMode::DutyPhaseFull,
             gain_seq_size: 0,
+            last_msg_id: 0,
         }
     }
 
@@ -54,6 +56,10 @@ impl Parser {
             let header = raw_buf.as_ptr() as *const GlobalHeader;
             ((*header).msg_id, (*header).fpga_flag, (*header).cpu_flag)
         };
+        if msg_id == self.last_msg_id {
+            return vec![];
+        }
+        self.last_msg_id = msg_id;
 
         res.push(AutdData::CtrlFlag(fpga_flag, cpu_flag));
         match msg_id {
