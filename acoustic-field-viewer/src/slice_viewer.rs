@@ -4,7 +4,7 @@
  * Created Date: 11/11/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 03/12/2021
+ * Last Modified: 17/12/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -19,7 +19,14 @@ use vulkano::{
     descriptor_set::PersistentDescriptorSet,
     device::Device,
     image::{view::ImageView, StorageImage},
-    pipeline::{GraphicsPipeline, PipelineBindPoint},
+    pipeline::{
+        graphics::{
+            color_blend::ColorBlendState, depth_stencil::DepthStencilState,
+            input_assembly::InputAssemblyState, vertex_input::BuffersDefinition,
+            viewport::ViewportState,
+        },
+        GraphicsPipeline, Pipeline, PipelineBindPoint,
+    },
     render_pass::Subpass,
 };
 
@@ -37,6 +44,7 @@ struct Vertex {
 }
 vulkano::impl_vertex!(Vertex, position, tex_coords);
 
+#[allow(clippy::needless_question_mark)]
 mod vs {
     vulkano_shaders::shader! {
         ty: "vertex",
@@ -44,6 +52,7 @@ mod vs {
     }
 }
 
+#[allow(clippy::needless_question_mark)]
 mod fs {
     vulkano_shaders::shader! {
         ty: "fragment",
@@ -68,22 +77,21 @@ impl SliceViewer {
         let vertices = Self::create_vertices(device.clone(), settings);
         let indices = Self::create_indices(device.clone());
 
-        let vs = vs::Shader::load(device.clone()).unwrap();
-        let fs = fs::Shader::load(device.clone()).unwrap();
+        let vs = vs::load(device.clone()).unwrap();
+        let fs = fs::load(device.clone()).unwrap();
 
-        let pipeline = Arc::new(
-            GraphicsPipeline::start()
-                .vertex_input_single_buffer::<Vertex>()
-                .vertex_shader(vs.main_entry_point(), ())
-                .triangle_list()
-                .viewports_dynamic_scissors_irrelevant(1)
-                .fragment_shader(fs.main_entry_point(), ())
-                .blend_alpha_blending()
-                .depth_stencil_simple_depth()
-                .render_pass(Subpass::from(renderer.render_pass(), 0).unwrap())
-                .build(device.clone())
-                .unwrap(),
-        );
+        let subpass = Subpass::from(renderer.render_pass(), 0).unwrap();
+        let pipeline = GraphicsPipeline::start()
+            .vertex_input_state(BuffersDefinition::new().vertex::<Vertex>())
+            .vertex_shader(vs.entry_point("main").unwrap(), ())
+            .input_assembly_state(InputAssemblyState::new())
+            .viewport_state(ViewportState::viewport_dynamic_scissor_irrelevant())
+            .fragment_shader(fs.entry_point("main").unwrap(), ())
+            .color_blend_state(ColorBlendState::new(subpass.num_color_attachments()).blend_alpha())
+            .depth_stencil_state(DepthStencilState::simple_depth_test())
+            .render_pass(subpass)
+            .build(device.clone())
+            .unwrap();
 
         let width = settings.slice_width / settings.slice_pixel_size;
         let height = settings.slice_height / settings.slice_pixel_size;
@@ -161,7 +169,7 @@ impl SliceViewer {
     fn create_descriptor_set(
         &mut self,
         image: Arc<CpuAccessibleBuffer<[Vector4]>>,
-    ) -> PersistentDescriptorSet {
+    ) -> Arc<PersistentDescriptorSet> {
         let layout = self
             .pipeline
             .layout()

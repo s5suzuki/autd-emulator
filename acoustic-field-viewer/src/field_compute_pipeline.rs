@@ -4,7 +4,7 @@
  * Created Date: 28/11/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 03/12/2021
+ * Last Modified: 17/12/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -21,7 +21,7 @@ use vulkano::{
     device::Queue,
     format::Format,
     image::{view::ImageView, ImageDimensions, ImmutableImage, MipmapsCount},
-    pipeline::{ComputePipeline, PipelineBindPoint},
+    pipeline::{ComputePipeline, Pipeline, PipelineBindPoint},
     sampler::{Filter, MipmapMode, Sampler, SamplerAddressMode},
     sync::GpuFuture,
 };
@@ -42,17 +42,15 @@ pub struct FieldComputePipeline {
 impl FieldComputePipeline {
     pub fn new(queue: Arc<Queue>, settings: &ViewerSettings) -> Self {
         let pipeline = {
-            let shader = cs::Shader::load(queue.device().clone()).unwrap();
-            Arc::new(
-                ComputePipeline::new(
-                    queue.device().clone(),
-                    &shader.main_entry_point(),
-                    &(),
-                    None,
-                    |_| {},
-                )
-                .unwrap(),
+            let shader = cs::load(queue.device().clone()).unwrap();
+            ComputePipeline::new(
+                queue.device().clone(),
+                shader.entry_point("main").unwrap(),
+                &(),
+                None,
+                |_| {},
             )
+            .unwrap()
         };
 
         let color_map_desc_set =
@@ -117,7 +115,7 @@ impl FieldComputePipeline {
         let layout = pipeline.layout().descriptor_set_layouts().get(4).unwrap();
         let mut set_builder = PersistentDescriptorSet::start(layout.clone());
         set_builder.add_sampled_image(texture, sampler).unwrap();
-        Arc::new(set_builder.build().unwrap())
+        set_builder.build().unwrap()
     }
 
     pub fn update(
@@ -193,7 +191,7 @@ impl FieldComputePipeline {
             .unwrap();
         let mut set_builder = PersistentDescriptorSet::start(layout.clone());
         set_builder.add_buffer(config_buffer).unwrap();
-        let set_1 = Arc::new(set_builder.build().unwrap());
+        let set_1 = set_builder.build().unwrap();
 
         let layout = self
             .pipeline
@@ -205,7 +203,7 @@ impl FieldComputePipeline {
         set_builder
             .add_buffer(self.source_pos_buf.clone().unwrap())
             .unwrap();
-        let set_2 = Arc::new(set_builder.build().unwrap());
+        let set_2 = set_builder.build().unwrap();
 
         let layout = self
             .pipeline
@@ -217,7 +215,7 @@ impl FieldComputePipeline {
         set_builder
             .add_buffer(self.source_drive_buf.clone().unwrap())
             .unwrap();
-        let set_3 = Arc::new(set_builder.build().unwrap());
+        let set_3 = set_builder.build().unwrap();
 
         builder
             .bind_pipeline_compute(self.pipeline.clone())
@@ -263,6 +261,7 @@ impl FieldComputePipeline {
     }
 }
 
+#[allow(clippy::needless_question_mark)]
 mod cs {
     vulkano_shaders::shader! {
         ty: "compute",

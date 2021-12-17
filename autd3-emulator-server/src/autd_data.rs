@@ -4,15 +4,18 @@
  * Created Date: 07/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 03/12/2021
+ * Last Modified: 17/12/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
  *
  */
 
-use autd3_core::hardware_defined::{
-    CPUControlFlags, FPGAControlFlags, GainMode, NUM_TRANS_X, NUM_TRANS_Y, TRANS_SPACING_MM,
+use autd3_core::{
+    hardware_defined::{
+        CPUControlFlags, FPGAControlFlags, NUM_TRANS_X, NUM_TRANS_Y, TRANS_SPACING_MM,
+    },
+    sequence::GainMode,
 };
 
 use crate::Vector3;

@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-autd3-core = "1.9.3"
+autd3-core = "1.10.0"
 bitflags = "1.3.2"
 camera_controllers = "0.32.0"
 imgui = "0.8.0"
@@ -16,9 +16,9 @@ png = "0.17.2"
 quaternion = "0.4.1"
 scarlet = "1.1.0"
 serde = { version = "1.0.130", features = ["derive"] }
-vulkano = "0.26.0"
-vulkano-shaders = "0.26.0"
-vulkano-win = "0.26.0"
-winit = "0.25.0"
+vulkano = "0.27.1"
+vulkano-shaders = "0.27.1"
+vulkano-win = "0.27.1"
+winit = "0.25.0" #imgui depends winit 0.25
 vecmath = "1.0.0"
 vecmath-util = {path="../vecmath-util"}

@@ -4,7 +4,7 @@
  * Created Date: 30/11/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 03/12/2021
+ * Last Modified: 17/12/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -23,7 +23,14 @@ use vulkano::{
         view::ImageView, ImageDimensions, ImageViewAbstract, ImmutableImage, MipmapsCount,
         StorageImage,
     },
-    pipeline::{vertex::BuffersDefinition, GraphicsPipeline, PipelineBindPoint},
+    pipeline::{
+        graphics::{
+            color_blend::ColorBlendState, depth_stencil::DepthStencilState,
+            input_assembly::InputAssemblyState, vertex_input::BuffersDefinition,
+            viewport::ViewportState,
+        },
+        GraphicsPipeline, Pipeline, PipelineBindPoint,
+    },
     render_pass::Subpass,
     sampler::{Filter, MipmapMode, Sampler, SamplerAddressMode},
 };
@@ -61,6 +68,7 @@ struct ColorInstanceData {
 }
 vulkano::impl_vertex!(ColorInstanceData, color);
 
+#[allow(clippy::needless_question_mark)]
 mod vs {
     vulkano_shaders::shader! {
         ty: "vertex",
@@ -68,6 +76,7 @@ mod vs {
     }
 }
 
+#[allow(clippy::needless_question_mark)]
 mod fs {
     vulkano_shaders::shader! {
         ty: "fragment",
@@ -99,27 +108,26 @@ impl TransViewer {
         let color_instance_data =
             Self::create_color_instance_data(renderer.device(), settings, &empty, coloring_method);
 
-        let vs = vs::Shader::load(device.clone()).unwrap();
-        let fs = fs::Shader::load(device.clone()).unwrap();
+        let vs = vs::load(device.clone()).unwrap();
+        let fs = fs::load(device.clone()).unwrap();
 
-        let pipeline = Arc::new(
-            GraphicsPipeline::start()
-                .vertex_input(
-                    BuffersDefinition::new()
-                        .vertex::<Vertex>()
-                        .instance::<ModelInstanceData>()
-                        .instance::<ColorInstanceData>(),
-                )
-                .vertex_shader(vs.main_entry_point(), ())
-                .triangle_list()
-                .viewports_dynamic_scissors_irrelevant(1)
-                .fragment_shader(fs.main_entry_point(), ())
-                .blend_alpha_blending()
-                .depth_stencil_simple_depth()
-                .render_pass(Subpass::from(renderer.render_pass(), 0).unwrap())
-                .build(device.clone())
-                .unwrap(),
-        );
+        let subpass = Subpass::from(renderer.render_pass(), 0).unwrap();
+        let pipeline = GraphicsPipeline::start()
+            .vertex_input_state(
+                BuffersDefinition::new()
+                    .vertex::<Vertex>()
+                    .instance::<ModelInstanceData>()
+                    .instance::<ColorInstanceData>(),
+            )
+            .vertex_shader(vs.entry_point("main").unwrap(), ())
+            .input_assembly_state(InputAssemblyState::new())
+            .viewport_state(ViewportState::viewport_dynamic_scissor_irrelevant())
+            .fragment_shader(fs.entry_point("main").unwrap(), ())
+            .color_blend_state(ColorBlendState::new(subpass.num_color_attachments()).blend_alpha())
+            .depth_stencil_state(DepthStencilState::simple_depth_test())
+            .render_pass(subpass)
+            .build(device.clone())
+            .unwrap();
 
         let texture_desc_set = Self::create_texture_desc_set(pipeline.clone(), renderer.queue());
         Self {
@@ -325,7 +333,7 @@ impl TransViewer {
         set_builder
             .add_sampled_image(texture.clone(), sampler)
             .unwrap();
-        Arc::new(set_builder.build().unwrap())
+        set_builder.build().unwrap()
     }
 
     fn load_image(queue: Arc<Queue>) -> Arc<dyn ImageViewAbstract> {

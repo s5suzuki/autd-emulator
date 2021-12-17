@@ -4,7 +4,7 @@
  * Created Date: 11/11/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 01/12/2021
+ * Last Modified: 17/12/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -14,18 +14,19 @@
 use std::{f32::consts::PI, sync::Arc};
 
 use camera_controllers::{Camera, CameraPerspective, FirstPerson, FirstPersonSettings};
-use vulkano::image::AttachmentImage;
-use vulkano::instance::debug::{DebugCallback, MessageSeverity, MessageType};
 use vulkano::{
     device::{
         physical::{PhysicalDevice, PhysicalDeviceType},
         Device, DeviceExtensions, Features, Queue,
     },
     format::Format,
-    image::{view::ImageView, ImageUsage, SwapchainImage},
-    instance::{Instance, InstanceExtensions},
-    pipeline::viewport::Viewport,
-    render_pass::{Framebuffer, FramebufferAbstract, RenderPass},
+    image::{view::ImageView, AttachmentImage, ImageAccess, ImageUsage, SwapchainImage},
+    instance::{
+        debug::{DebugCallback, MessageSeverity, MessageType},
+        Instance, InstanceExtensions,
+    },
+    pipeline::graphics::viewport::Viewport,
+    render_pass::{Framebuffer, RenderPass},
     swapchain::{
         self, AcquireError, ColorSpace, FullscreenExclusive, PresentMode, Surface,
         SurfaceTransform, Swapchain, SwapchainCreationError,
@@ -51,7 +52,7 @@ pub struct Renderer {
     images: Vec<Arc<SwapchainImage<Window>>>,
     recreate_swapchain: bool,
     previous_frame_end: Option<Box<dyn GpuFuture>>,
-    frame_buffers: Vec<Arc<dyn FramebufferAbstract>>,
+    frame_buffers: Vec<Arc<Framebuffer>>,
     render_pass: Arc<RenderPass>,
     viewport: Viewport,
     pub camera: Camera<f32>,
@@ -162,30 +163,28 @@ impl Renderer {
                 PresentMode::Immediate
             },
         );
-        let render_pass = Arc::new(
-            vulkano::single_pass_renderpass!(
-                device.clone(),
-                attachments: {
-                    color: {
-                        load: Clear,
-                        store: Store,
-                        format: swap_chain.format(),
-                        samples: 1,
-                    },
-                    depth: {
-                        load: Clear,
-                        store: DontCare,
-                        format: Format::D16_UNORM,
-                        samples: 1,
-                    }
+        let render_pass = vulkano::single_pass_renderpass!(
+            device.clone(),
+            attachments: {
+                color: {
+                    load: Clear,
+                    store: Store,
+                    format: swap_chain.format(),
+                    samples: 1,
                 },
-                pass: {
-                    color: [color],
-                    depth_stencil: {depth}
+                depth: {
+                    load: Clear,
+                    store: DontCare,
+                    format: Format::D16_UNORM,
+                    samples: 1,
                 }
-            )
-            .unwrap(),
-        );
+            },
+            pass: {
+                color: [color],
+                depth_stencil: {depth}
+            }
+        )
+        .unwrap();
         let frame_buffers = Self::window_size_dependent_setup(
             device.clone(),
             &images,
@@ -315,7 +314,7 @@ impl Renderer {
         self.queue.clone()
     }
 
-    pub fn frame_buffer(&self) -> Arc<dyn FramebufferAbstract> {
+    pub fn frame_buffer(&self) -> Arc<Framebuffer> {
         self.frame_buffers[self.image_index].clone()
     }
 
@@ -420,8 +419,8 @@ impl Renderer {
         images: &[Arc<SwapchainImage<Window>>],
         render_pass: Arc<RenderPass>,
         viewport: &mut Viewport,
-    ) -> Vec<Arc<dyn FramebufferAbstract>> {
-        let dimensions = images[0].dimensions();
+    ) -> Vec<Arc<Framebuffer>> {
+        let dimensions = images[0].dimensions().width_height();
 
         let depth_buffer = ImageView::new(
             AttachmentImage::transient(device, dimensions, Format::D16_UNORM).unwrap(),
@@ -433,15 +432,13 @@ impl Renderer {
             .iter()
             .map(|image| {
                 let view = ImageView::new(image.clone()).unwrap();
-                Arc::new(
-                    Framebuffer::start(render_pass.clone())
-                        .add(view)
-                        .unwrap()
-                        .add(depth_buffer.clone())
-                        .unwrap()
-                        .build()
-                        .unwrap(),
-                ) as Arc<dyn FramebufferAbstract>
+                Framebuffer::start(render_pass.clone())
+                    .add(view)
+                    .unwrap()
+                    .add(depth_buffer.clone())
+                    .unwrap()
+                    .build()
+                    .unwrap()
             })
             .collect::<Vec<_>>()
     }
