@@ -4,7 +4,7 @@
  * Created Date: 06/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 03/12/2021
+ * Last Modified: 17/12/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -25,8 +25,11 @@ use acoustic_field_viewer::{
     trans_viewer::TransViewer,
     Matrix4, UpdateFlag, Vector3,
 };
-use autd3_core::hardware_defined::{
-    CPUControlFlags, FPGAControlFlags, MOD_SAMPLING_FREQ_BASE, NUM_TRANS_IN_UNIT, SEQ_BASE_FREQ,
+use autd3_core::{
+    hardware_defined::{
+        CPUControlFlags, FPGAControlFlags, MOD_SAMPLING_FREQ_BASE, NUM_TRANS_IN_UNIT, SEQ_BASE_FREQ,
+    },
+    sequence::GainMode,
 };
 use autd3_emulator_server::{
     AutdData, AutdServer, DelayOffset, Gain, GainSequence, Modulation, PointSequence,
@@ -796,7 +799,7 @@ impl App {
                         }
                     }
 
-                    if self.fpga_flag.contains(FPGAControlFlags::OP_MODE) {
+                    if self.fpga_flag.contains(FPGAControlFlags::SEQ_MODE) {
                         ui.separator();
                         if let Some(seq) = &self.point_sequence {
                             ui.text("PointSequence mode");
@@ -829,12 +832,9 @@ impl App {
                             ui.text(format!(
                                 "Gain mode: {}",
                                 match seq.gain_mode {
-                                    autd3_core::hardware_defined::GainMode::DutyPhaseFull =>
-                                        "DutyPhaseFull",
-                                    autd3_core::hardware_defined::GainMode::PhaseFull =>
-                                        "PhaseFull",
-                                    autd3_core::hardware_defined::GainMode::PhaseHalf =>
-                                        "PhaseHalf",
+                                    GainMode::DutyPhaseFull => "DutyPhaseFull",
+                                    GainMode::PhaseFull => "PhaseFull",
+                                    GainMode::PhaseHalf => "PhaseHalf",
                                 }
                             ));
                             ui.text(format!("Sequence size: {}", seq.seq_data.len()));
@@ -890,8 +890,8 @@ impl App {
                     );
                     ui.checkbox_flags("SILENT", &mut flag, FPGAControlFlags::SILENT);
                     ui.checkbox_flags("FORCE FAN", &mut flag, FPGAControlFlags::FORCE_FAN);
-                    ui.checkbox_flags("OP MODE", &mut flag, FPGAControlFlags::OP_MODE);
                     ui.checkbox_flags("SEQ MODE", &mut flag, FPGAControlFlags::SEQ_MODE);
+                    ui.checkbox_flags("SEQ GAIN MODE", &mut flag, FPGAControlFlags::SEQ_GAIN_MODE);
 
                     ui.separator();
                     ui.text("CPU flag");
@@ -906,6 +906,7 @@ impl App {
                         CPUControlFlags::READS_FPGA_INFO,
                     );
                     ui.checkbox_flags("WRITE BODY", &mut flag, CPUControlFlags::WRITE_BODY);
+                    ui.checkbox_flags("WAIT ON SYNC", &mut flag, CPUControlFlags::WAIT_ON_SYNC);
                 });
                 TabItem::new("Log").build(ui, || {
                     if ui.radio_button_bool("enable", self.setting.log_enable) {

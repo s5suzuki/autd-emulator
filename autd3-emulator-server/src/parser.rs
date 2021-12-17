@@ -4,7 +4,7 @@
  * Created Date: 29/04/2020
  * Author: Shun Suzuki
  * -----
- * Last Modified: 14/12/2021
+ * Last Modified: 17/12/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2020 Hapis Lab. All rights reserved.
@@ -13,7 +13,10 @@
 
 use std::{mem::size_of, vec};
 
-use autd3_core::hardware_defined::{CPUControlFlags, GainMode, GlobalHeader, NUM_TRANS_IN_UNIT};
+use autd3_core::{
+    hardware_defined::{CPUControlFlags, GlobalHeader, NUM_TRANS_IN_UNIT},
+    sequence::GainMode,
+};
 
 use crate::{
     autd_data::{AutdData, Gain, Geometry, Modulation},
@@ -86,9 +89,10 @@ impl Parser {
                         Self::parse_as_offset_delay(&raw_buf[size_of::<GlobalHeader>()..]);
                     res.push(AutdData::DelayOffset(offset_delay));
                 } else if fpga_flag
-                    .contains(autd3_core::hardware_defined::FPGAControlFlags::OP_MODE)
+                    .contains(autd3_core::hardware_defined::FPGAControlFlags::SEQ_MODE)
                 {
-                    if fpga_flag.contains(autd3_core::hardware_defined::FPGAControlFlags::SEQ_MODE)
+                    if fpga_flag
+                        .contains(autd3_core::hardware_defined::FPGAControlFlags::SEQ_GAIN_MODE)
                     {
                         if let Some(seq) = self.parse_as_gain_sequence(&raw_buf) {
                             res.push(AutdData::GainSequence(seq));
