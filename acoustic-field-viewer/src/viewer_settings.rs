@@ -1,13 +1,13 @@
 /*
- * File: setting.rs
- * Project: sound_source
- * Created Date: 27/04/2020
+ * File: viewer_settings.rs
+ * Project: src
+ * Created Date: 26/11/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 16/09/2021
+ * Last Modified: 03/12/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
- * Copyright (c) 2020 Hapis Lab. All rights reserved.
+ * Copyright (c) 2021 Hapis Lab. All rights reserved.
  *
  */
 
@@ -27,12 +27,14 @@ pub struct ViewerSettings {
     pub color_scale: f32,
     pub slice_alpha: f32,
     pub source_alpha: f32,
-    pub slice_width: i32,
-    pub slice_height: i32,
+    pub slice_width: u32,
+    pub slice_height: u32,
+    pub slice_pixel_size: u32,
     pub slice_pos: Vector4,
     pub slice_angle: Vector3,
     pub camera_pos: Vector3,
     pub camera_angle: Vector3,
+    pub camera_move_speed: f32,
     pub fov: f32,
     pub near_clip: f32,
     pub far_clip: f32,
@@ -58,6 +60,7 @@ impl Default for ViewerSettings {
             wave_length: 8.5,
             slice_width: 400,
             slice_height: 300,
+            slice_pixel_size: 1,
             source_alpha: 1.0,
             slice_pos: [
                 TRANS_SPACING_MM as f32 * 8.5,
@@ -68,6 +71,7 @@ impl Default for ViewerSettings {
             slice_angle: [PI / 2., 0., 0.],
             camera_pos: [0., -500.0, 200.0],
             camera_angle: [PI / 2., 0., 0.],
+            camera_move_speed: 10.0,
             fov: 60. * PI / 180.0,
             near_clip: 0.1,
             far_clip: 1000.,

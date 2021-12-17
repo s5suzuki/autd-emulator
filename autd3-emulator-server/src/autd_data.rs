@@ -4,16 +4,18 @@
  * Created Date: 07/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 15/10/2021
+ * Last Modified: 17/12/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
  *
  */
 
-use acoustic_field_viewer::sound_source::SoundSource;
-use autd3_core::hardware_defined::{
-    CPUControlFlags, FPGAControlFlags, GainMode, NUM_TRANS_X, NUM_TRANS_Y, TRANS_SPACING_MM,
+use autd3_core::{
+    hardware_defined::{
+        CPUControlFlags, FPGAControlFlags, NUM_TRANS_X, NUM_TRANS_Y, TRANS_SPACING_MM,
+    },
+    sequence::GainMode,
 };
 
 use crate::Vector3;
@@ -112,7 +114,7 @@ pub enum AutdData {
 }
 
 impl Geometry {
-    pub fn make_autd_transducers(&self) -> Vec<SoundSource> {
+    pub fn make_autd_transducers(&self) -> Vec<(Vector3, Vector3)> {
         let mut transducers = Vec::new();
         for y in 0..NUM_TRANS_Y {
             for x in 0..NUM_TRANS_X {
@@ -125,7 +127,7 @@ impl Geometry {
                 let pos = self.origin;
                 let pos = vecmath::vec3_add(pos, x_dir);
                 let pos = vecmath::vec3_add(pos, y_dir);
-                transducers.push(SoundSource::new(pos, zdir, 0.0, 0.0));
+                transducers.push((pos, zdir));
             }
         }
         transducers

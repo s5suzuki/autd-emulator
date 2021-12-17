@@ -4,7 +4,7 @@
  * Created Date: 06/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 15/10/2021
+ * Last Modified: 17/12/2021
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -13,51 +13,53 @@
 
 mod settings;
 
-#[cfg(feature = "offscreen_renderer")]
-mod offscreen_render_sys;
-
-#[cfg(feature = "offscreen_renderer")]
-use offscreen_render_sys::*;
-
-use std::{collections::VecDeque, f32::consts::PI, time::Instant};
+use std::{collections::VecDeque, f32::consts::PI, path::Path, time::Instant};
 
 use acoustic_field_viewer::{
-    axis_3d::Axis3D,
     camera_helper,
-    sound_source::{SoundSource, SourceFlag},
-    view::{
-        render_system::RenderSystem, AcousticFiledSliceViewer, DeviceDirectionViewer,
-        SoundSourceViewer, System, UpdateFlag,
-    },
-    Matrix4, Vector3,
+    dir_viewer::{Axis3D, DirectionViewer},
+    field_compute_pipeline::FieldComputePipeline,
+    renderer::Renderer,
+    slice_viewer::SliceViewer,
+    sound_sources::{Drive, SoundSources},
+    trans_viewer::TransViewer,
+    Matrix4, UpdateFlag, Vector3,
 };
-use autd3_core::hardware_defined::{
-    CPUControlFlags, FPGAControlFlags, MOD_SAMPLING_FREQ_BASE, NUM_TRANS_IN_UNIT, SEQ_BASE_FREQ,
+use autd3_core::{
+    hardware_defined::{
+        CPUControlFlags, FPGAControlFlags, MOD_SAMPLING_FREQ_BASE, NUM_TRANS_IN_UNIT, SEQ_BASE_FREQ,
+    },
+    sequence::GainMode,
 };
 use autd3_emulator_server::{
     AutdData, AutdServer, DelayOffset, Gain, GainSequence, Modulation, PointSequence,
 };
-use gfx::Device;
-use glutin::{
+
+use imgui::*;
+use imgui_winit_support::{HiDpiMode, WinitPlatform};
+use vulkano::{
+    command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, SubpassContents},
+    image::view::ImageView,
+    sync::GpuFuture,
+};
+use winit::{
     event::{Event, WindowEvent},
-    event_loop::ControlFlow,
+    event_loop::{ControlFlow, EventLoop},
     platform::run_return::EventLoopExtRunReturn,
 };
-use imgui::*;
-use shader_version::OpenGL;
 
 use crate::settings::Setting;
 
 struct App {
     setting: Setting,
-    sources: Vec<SoundSource>,
+    sources: SoundSources,
     axis: Vec<Axis3D>,
     dev_num: usize,
-    sound_source_viewer: SoundSourceViewer,
-    device_direction_viewer: DeviceDirectionViewer,
-    field_slice_viewer: AcousticFiledSliceViewer,
+    trans_viewer: TransViewer,
+    dir_viewer: DirectionViewer,
+    slice_viewer: SliceViewer,
+    field_compute_pipeline: FieldComputePipeline,
     view_projection: (Matrix4, Matrix4),
-    init: bool,
     fpga_flag: FPGAControlFlags,
     cpu_flag: CPUControlFlags,
     modulation: Option<Modulation>,
@@ -67,37 +69,33 @@ struct App {
     seq_wavelength: f32,
     delay_offset: Option<DelayOffset>,
     log_buf: VecDeque<String>,
-    last_frame_time: std::time::Instant,
+    last_frame: Instant,
+    last_frame_fps: Instant,
     frame_count: usize,
     fps: f64,
-    #[cfg(feature = "offscreen_renderer")]
-    offscreen_render_sys: OffscreenRenderSystem,
+    save_image: bool,
+    recording: bool,
 }
 
 impl App {
-    pub fn new(setting: Setting, system: &System) -> Self {
-        let opengl = OpenGL::V4_5;
-        let sound_source_viewer = SoundSourceViewer::new(&system.render_sys, opengl);
-        let field_slice_viewer =
-            AcousticFiledSliceViewer::new(&system.render_sys, opengl, &setting.viewer_setting);
-        let device_direction_viewer = DeviceDirectionViewer::new(&system.render_sys, opengl);
-        let view_projection = system
-            .render_sys
-            .get_view_projection(&setting.viewer_setting);
-
-        #[cfg(feature = "offscreen_renderer")]
-        let offscreen_render_sys = OffscreenRenderSystem::new(&setting);
+    pub fn new(setting: Setting, renderer: &Renderer) -> Self {
+        let trans_viewer = TransViewer::new(renderer, &setting.viewer_setting);
+        let slice_viewer = SliceViewer::new(renderer, &setting.viewer_setting);
+        let dir_viewer = DirectionViewer::new(renderer, &setting.viewer_setting);
+        let field_compute_pipeline =
+            FieldComputePipeline::new(renderer.queue(), &setting.viewer_setting);
+        let view_projection = renderer.get_view_projection(&setting.viewer_setting);
 
         Self {
             setting,
-            sources: Vec::new(),
+            sources: SoundSources::new(),
             axis: Vec::new(),
             dev_num: 0,
-            sound_source_viewer,
-            device_direction_viewer,
-            field_slice_viewer,
+            trans_viewer,
+            dir_viewer,
+            slice_viewer,
+            field_compute_pipeline,
             view_projection,
-            init: true,
             fpga_flag: FPGAControlFlags::empty(),
             cpu_flag: CPUControlFlags::empty(),
             modulation: None,
@@ -107,124 +105,170 @@ impl App {
             seq_wavelength: 8.5,
             delay_offset: None,
             log_buf: VecDeque::new(),
-            last_frame_time: std::time::Instant::now(),
+            last_frame: std::time::Instant::now(),
+            last_frame_fps: std::time::Instant::now(),
             frame_count: 0,
             fps: 0.0,
-            #[cfg(feature = "offscreen_renderer")]
-            offscreen_render_sys,
+            save_image: false,
+            recording: false,
         }
     }
 
-    pub fn run(&mut self, system: System) {
-        let System {
-            mut events_loop,
-            mut imgui,
-            mut platform,
-            mut render_sys,
-            mut encoder,
-            ..
-        } = system;
+    pub fn render<F>(
+        &mut self,
+        renderer: &mut Renderer,
+        imgui: &mut Context,
+        platform: &mut WinitPlatform,
+        imgui_renderer: &mut imgui_vulkano_renderer::Renderer,
+        autd_server: &mut AutdServer,
+        before_future: F,
+    ) -> Box<dyn GpuFuture>
+    where
+        F: GpuFuture + 'static,
+    {
+        let framebuffer = renderer.frame_buffer();
 
-        let mut autd_server = AutdServer::new(&format!("127.0.0.1:{}", self.setting.port)).unwrap();
+        let mut builder = AutoCommandBufferBuilder::primary(
+            renderer.device(),
+            renderer.queue().family(),
+            CommandBufferUsage::OneTimeSubmit,
+        )
+        .unwrap();
 
-        self.reset(&mut render_sys);
+        let clear_values = vec![self.setting.viewer_setting.background.into(), 1f32.into()];
+        builder
+            .begin_render_pass(framebuffer, SubpassContents::Inline, clear_values)
+            .unwrap()
+            .set_viewport(0, [renderer.viewport()]);
 
-        let mut last_frame = Instant::now();
-        let mut run = true;
-        while run {
-            events_loop.run_return(|event, _, control_flow| {
-                self.handle_event(&mut render_sys, &event);
-                platform.handle_event(imgui.io_mut(), render_sys.window(), &event);
-                if let Event::WindowEvent { event, .. } = event {
-                    match event {
-                        WindowEvent::Resized(_) => render_sys.update_views(),
-                        WindowEvent::CloseRequested => {
-                            run = false;
-                        }
-                        _ => (),
-                    }
-                }
-                *control_flow = ControlFlow::Exit;
-            });
-            if !run {
-                break;
-            }
+        self.trans_viewer.render(&mut builder);
+        self.slice_viewer.render(&mut builder);
+        self.dir_viewer.render(&mut builder);
+        builder.end_render_pass().unwrap();
+        let command_buffer = builder.build().unwrap();
 
-            let mut update_flag = self.handle_autd(&mut autd_server);
-            update_flag |= self.update_camera(&mut render_sys, imgui.io());
+        let mut update_flag = self.handle_autd(autd_server);
+        update_flag |= self.update_camera(renderer, imgui.io());
 
-            let io = imgui.io_mut();
-            platform
-                .prepare_frame(io, render_sys.window())
-                .expect("Failed to start frame");
-            let now = Instant::now();
-            io.update_delta_time(now - last_frame);
-            last_frame = now;
-            let ui = imgui.frame();
-            {
-                self.frame_count += 1;
-                let now = std::time::Instant::now();
-                let duration = now.saturating_duration_since(self.last_frame_time);
-                if duration.as_millis() > 1000 {
-                    self.fps = 1000000.0 / duration.as_micros() as f64 * self.frame_count as f64;
-                    self.last_frame_time = now;
-                    self.frame_count = 0;
-                }
-            }
-            update_flag |= self.update_ui(&ui, &mut render_sys);
-            self.update_view(&mut render_sys, update_flag);
-            #[cfg(feature = "offscreen_renderer")]
-            {
-                self.offscreen_render_sys.update_flag_for_save |= update_flag;
-            }
-
-            encoder.clear(
-                &render_sys.output_color,
-                self.setting.viewer_setting.background,
-            );
-            encoder.clear_depth(&render_sys.output_stencil, 1.0);
-            self.sound_source_viewer.renderer(&mut encoder);
-            self.field_slice_viewer.renderer(&mut encoder);
-            self.device_direction_viewer.renderer(&mut encoder);
-
-            platform.prepare_render(&ui, render_sys.window());
-            let draw_data = ui.render();
-            render_sys
-                .renderer
-                .render(
-                    &mut render_sys.factory,
-                    &mut encoder,
-                    &mut render_sys.output_color,
-                    draw_data,
-                )
-                .expect("Rendering failed");
-            encoder.flush(&mut render_sys.device);
-            render_sys.swap_buffers();
-            render_sys.device.cleanup();
-        }
-
-        #[cfg(feature = "offscreen_renderer")]
+        let io = imgui.io_mut();
+        platform
+            .prepare_frame(io, renderer.window())
+            .expect("Failed to start frame");
+        let now = Instant::now();
+        io.update_delta_time(now - self.last_frame);
+        self.last_frame = now;
         {
-            self.setting.save_file_path = self.offscreen_render_sys.save_path.to_owned();
-            self.setting.record_path = self.offscreen_render_sys.record_path.to_owned();
+            self.frame_count += 1;
+            let duration = now.saturating_duration_since(self.last_frame_fps);
+            if duration.as_millis() > 1000 {
+                self.fps = 1000000.0 / duration.as_micros() as f64 * self.frame_count as f64;
+                self.last_frame_fps = now;
+                self.frame_count = 0;
+            }
         }
-        self.setting.merge_render_sys(&render_sys);
-        self.setting.save("setting.json");
+
+        let ui = imgui.frame();
+        update_flag |= self.update_ui(&ui, renderer);
+        self.update_view(renderer, update_flag);
+
+        let update_field = update_flag.contains(UpdateFlag::INIT_SOURCE)
+            || update_flag.contains(UpdateFlag::UPDATE_COLOR_MAP)
+            || update_flag.contains(UpdateFlag::UPDATE_SLICE_POS)
+            || update_flag.contains(UpdateFlag::UPDATE_SLICE_SIZE)
+            || update_flag.contains(UpdateFlag::UPDATE_SOURCE_DRIVE)
+            || update_flag.contains(UpdateFlag::UPDATE_SOURCE_FLAG)
+            || update_flag.contains(UpdateFlag::UPDATE_WAVENUM);
+
+        let filed_image = self.slice_viewer.field_image_view();
+        let slice_future = if update_field {
+            let after_compute = self
+                .field_compute_pipeline
+                .compute(
+                    filed_image,
+                    self.slice_viewer.model(),
+                    &self.sources,
+                    &self.setting.viewer_setting,
+                )
+                .join(before_future);
+            after_compute
+                .then_execute(renderer.queue(), command_buffer)
+                .unwrap()
+                .boxed()
+        } else {
+            before_future
+                .then_execute(renderer.queue(), command_buffer)
+                .unwrap()
+                .boxed()
+        };
+        let mut cmd_buf_builder = AutoCommandBufferBuilder::primary(
+            renderer.device(),
+            renderer.queue().family(),
+            vulkano::command_buffer::CommandBufferUsage::OneTimeSubmit,
+        )
+        .expect("Failed to create command buffer");
+
+        platform.prepare_render(&ui, renderer.window());
+        let draw_data = ui.render();
+        imgui_renderer
+            .draw_commands(
+                &mut cmd_buf_builder,
+                renderer.queue(),
+                ImageView::new(renderer.image()).unwrap(),
+                draw_data,
+            )
+            .expect("Rendering failed");
+
+        let cmd_buf = cmd_buf_builder
+            .build()
+            .expect("Failed to build command buffer");
+
+        let ui_future = slice_future
+            .then_execute(renderer.queue(), cmd_buf)
+            .unwrap();
+
+        ui_future.boxed()
     }
 
-    fn reset(&mut self, render_sys: &mut RenderSystem) {
-        self.field_slice_viewer
+    fn reset(&mut self, render: &mut Renderer) {
+        self.slice_viewer
             .move_to(self.setting.viewer_setting.slice_pos);
-        self.field_slice_viewer
+        self.slice_viewer
             .rotate_to(self.setting.viewer_setting.slice_angle);
 
-        render_sys.camera.position = self.setting.viewer_setting.camera_pos;
+        render.camera.position = self.setting.viewer_setting.camera_pos;
         camera_helper::set_camera_angle(
-            &mut render_sys.camera,
+            &mut render.camera,
             self.setting.viewer_setting.camera_angle,
         );
 
-        self.view_projection = render_sys.get_view_projection(&self.setting.viewer_setting);
+        self.field_compute_pipeline.update(
+            &self.sources,
+            UpdateFlag::all(),
+            &self.setting.viewer_setting,
+        );
+        let view_projection = render.get_view_projection(&self.setting.viewer_setting);
+        self.slice_viewer.update(
+            render,
+            &view_projection,
+            &self.setting.viewer_setting,
+            UpdateFlag::all(),
+        );
+        self.trans_viewer.update(
+            render,
+            &view_projection,
+            &self.setting.viewer_setting,
+            &self.sources,
+            UpdateFlag::all(),
+        );
+        self.dir_viewer.update(
+            render,
+            &view_projection,
+            &self.setting.viewer_setting,
+            &self.axis,
+            UpdateFlag::all(),
+        );
+
+        self.view_projection = view_projection;
     }
 
     fn handle_autd(&mut self, autd_server: &mut AutdServer) -> UpdateFlag {
@@ -246,10 +290,11 @@ impl App {
                             self.setting.show_axis.resize(self.dev_num, false);
                         }
                         for (i, geometry) in geometries.iter().enumerate() {
-                            for mut trans in geometry.make_autd_transducers() {
-                                trans.flag.set(SourceFlag::HIDDEN, !self.setting.show[i]);
-                                trans.flag.set(SourceFlag::DISABLE, !self.setting.enable[i]);
-                                self.sources.push(trans);
+                            for (pos, dir) in geometry.make_autd_transducers() {
+                                let enable = if self.setting.enable[i] { 1.0 } else { 0.0 };
+                                let visible = if self.setting.show[i] { 1.0 } else { 0.0 };
+                                self.sources
+                                    .add(pos, dir, Drive::new(0.0, 0.0, enable, visible));
                             }
                             let mut axis = Axis3D::new(
                                 geometry.origin,
@@ -271,7 +316,7 @@ impl App {
                         update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
                     }
                     AutdData::Clear => {
-                        for source in self.sources.iter_mut() {
+                        for source in self.sources.drives_mut() {
                             source.amp = 0.;
                             source.phase = 0.;
                         }
@@ -289,11 +334,12 @@ impl App {
                     AutdData::CtrlFlag(fpga_flag, cpu_flag) => {
                         self.fpga_flag = fpga_flag;
                         self.cpu_flag = cpu_flag;
-                        for source in self.sources.iter_mut() {
-                            source.flag.set(
-                                SourceFlag::DISABLE,
-                                !fpga_flag.contains(FPGAControlFlags::OUTPUT_ENABLE),
-                            );
+                        for source in self.sources.drives_mut() {
+                            source.enable = if fpga_flag.contains(FPGAControlFlags::OUTPUT_ENABLE) {
+                                1.0
+                            } else {
+                                0.0
+                            };
                         }
                         update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
                     }
@@ -336,109 +382,110 @@ impl App {
         update_flag
     }
 
-    fn handle_event(&mut self, render_sys: &mut RenderSystem, event: &Event<()>) {
-        if self.init {
-            self.update_view(render_sys, UpdateFlag::all());
-            self.init = false;
-        }
-        self.sound_source_viewer.handle_event(render_sys, event);
-        self.device_direction_viewer.handle_event(render_sys, event);
-        self.field_slice_viewer.handle_event(render_sys, event);
-    }
-
-    fn update_view(&mut self, render_sys: &mut RenderSystem, update_flag: UpdateFlag) {
-        self.sound_source_viewer.update(
-            render_sys,
-            self.view_projection,
+    fn update_view(&mut self, renderer: &mut Renderer, update_flag: UpdateFlag) {
+        self.trans_viewer.update(
+            renderer,
+            &self.view_projection,
             &self.setting.viewer_setting,
             &self.sources,
             update_flag,
         );
-        self.device_direction_viewer.update(
-            render_sys,
-            self.view_projection,
+        self.dir_viewer.update(
+            renderer,
+            &self.view_projection,
             &self.setting.viewer_setting,
             &self.axis,
             update_flag,
         );
-        self.field_slice_viewer.update(
-            render_sys,
-            self.view_projection,
+        self.slice_viewer.update(
+            renderer,
+            &self.view_projection,
             &self.setting.viewer_setting,
+            update_flag,
+        );
+        self.field_compute_pipeline.update(
             &self.sources,
             update_flag,
+            &self.setting.viewer_setting,
         );
     }
 
-    fn update_camera(&mut self, render_sys: &mut RenderSystem, io: &Io) -> UpdateFlag {
+    fn update_camera(&mut self, renderer: &mut Renderer, io: &Io) -> UpdateFlag {
         let mut update_flag = UpdateFlag::empty();
 
         let mouse_wheel = io.mouse_wheel;
         if !io.want_capture_mouse && mouse_wheel != 0.0 {
             let trans = vecmath::vec3_scale(
-                render_sys.camera.forward,
-                -mouse_wheel * self.setting.camera_move_speed,
+                renderer.camera.forward,
+                -mouse_wheel * self.setting.viewer_setting.camera_move_speed,
             );
             self.setting.viewer_setting.camera_pos =
                 vecmath::vec3_add(self.setting.viewer_setting.camera_pos, trans);
-            render_sys.camera.position = self.setting.viewer_setting.camera_pos;
-            self.view_projection = render_sys.get_view_projection(&self.setting.viewer_setting);
+            renderer.camera.position = self.setting.viewer_setting.camera_pos;
+            self.view_projection = renderer.get_view_projection(&self.setting.viewer_setting);
             update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
         }
         let mouse_delta = io.mouse_delta;
         if !io.want_capture_mouse && io.mouse_down[0] && !vecmath_util::is_zero(&mouse_delta) {
             if io.key_shift {
-                let mouse_delta =
-                    vecmath::vec2_scale(mouse_delta, self.setting.camera_move_speed / 3000.0);
-                let trans_x = vecmath::vec3_scale(render_sys.camera.right, mouse_delta[0]);
-                let trans_y = vecmath::vec3_scale(render_sys.camera.up, -mouse_delta[1]);
-                let to = vecmath::vec3_add(
-                    vecmath::vec3_add(trans_x, trans_y),
-                    render_sys.camera.forward,
+                let mouse_delta = vecmath::vec2_scale(
+                    mouse_delta,
+                    self.setting.viewer_setting.camera_move_speed / 3000.0,
                 );
-                let rot = vecmath_util::quaternion_to(render_sys.camera.forward, to);
+                let trans_x = vecmath::vec3_scale(renderer.camera.right, mouse_delta[0]);
+                let trans_y = vecmath::vec3_scale(renderer.camera.up, -mouse_delta[1]);
+                let to =
+                    vecmath::vec3_add(vecmath::vec3_add(trans_x, trans_y), renderer.camera.forward);
+                let rot = vecmath_util::quaternion_to(renderer.camera.forward, to);
 
-                render_sys.camera.forward =
-                    quaternion::rotate_vector(rot, render_sys.camera.forward);
-                render_sys.camera.up = quaternion::rotate_vector(rot, render_sys.camera.up);
-                render_sys.camera.right = quaternion::rotate_vector(rot, render_sys.camera.right);
+                renderer.camera.forward = quaternion::rotate_vector(rot, renderer.camera.forward);
+                renderer.camera.up = quaternion::rotate_vector(rot, renderer.camera.up);
+                renderer.camera.right = quaternion::rotate_vector(rot, renderer.camera.right);
                 let rotm = [
-                    render_sys.camera.right,
-                    render_sys.camera.up,
-                    render_sys.camera.forward,
+                    renderer.camera.right,
+                    renderer.camera.up,
+                    renderer.camera.forward,
                 ];
                 self.setting.viewer_setting.camera_angle =
                     camera_helper::rot_mat_to_euler_angles(&rotm);
             } else {
-                let mouse_delta =
-                    vecmath::vec2_scale(mouse_delta, self.setting.camera_move_speed / 10.0);
-                let trans_x = vecmath::vec3_scale(render_sys.camera.right, -mouse_delta[0]);
-                let trans_y = vecmath::vec3_scale(render_sys.camera.up, mouse_delta[1]);
+                let mouse_delta = vecmath::vec2_scale(
+                    mouse_delta,
+                    self.setting.viewer_setting.camera_move_speed / 10.0,
+                );
+                let trans_x = vecmath::vec3_scale(renderer.camera.right, -mouse_delta[0]);
+                let trans_y = vecmath::vec3_scale(renderer.camera.up, mouse_delta[1]);
                 let trans = vecmath::vec3_add(trans_x, trans_y);
                 self.setting.viewer_setting.camera_pos =
                     vecmath::vec3_add(self.setting.viewer_setting.camera_pos, trans);
-                render_sys.camera.position = self.setting.viewer_setting.camera_pos;
+                renderer.camera.position = self.setting.viewer_setting.camera_pos;
             }
-            self.view_projection = render_sys.get_view_projection(&self.setting.viewer_setting);
+            self.view_projection = renderer.get_view_projection(&self.setting.viewer_setting);
             update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
         }
 
         update_flag
     }
 
-    fn update_ui(&mut self, ui: &Ui, render_sys: &mut RenderSystem) -> UpdateFlag {
+    fn update_ui(&mut self, ui: &Ui, renderer: &mut Renderer) -> UpdateFlag {
         let mut update_flag = UpdateFlag::empty();
+        self.save_image = false;
         Window::new("Controller").build(ui, || {
             TabBar::new("Settings").build(ui, || {
                 TabItem::new("Slice").build(ui, || {
                     ui.text("Slice size");
-                    if Slider::new("Slice width", 0, 1000)
+                    if Slider::new("Slice width", 1, 1000)
                         .build(ui, &mut self.setting.viewer_setting.slice_width)
                     {
                         update_flag |= UpdateFlag::UPDATE_SLICE_SIZE;
                     }
-                    if Slider::new("Slice heigh", 0, 1000)
+                    if Slider::new("Slice heigh", 1, 1000)
                         .build(ui, &mut self.setting.viewer_setting.slice_height)
+                    {
+                        update_flag |= UpdateFlag::UPDATE_SLICE_SIZE;
+                    }
+                    if Slider::new("Pixel size", 1, 8)
+                        .build(ui, &mut self.setting.viewer_setting.slice_pixel_size)
                     {
                         update_flag |= UpdateFlag::UPDATE_SLICE_SIZE;
                     }
@@ -447,19 +494,19 @@ impl App {
                     ui.text("Slice position");
                     if Drag::new("Slice X").build(ui, &mut self.setting.viewer_setting.slice_pos[0])
                     {
-                        self.field_slice_viewer
+                        self.slice_viewer
                             .move_to(self.setting.viewer_setting.slice_pos);
                         update_flag |= UpdateFlag::UPDATE_SLICE_POS;
                     }
                     if Drag::new("Slice Y").build(ui, &mut self.setting.viewer_setting.slice_pos[1])
                     {
-                        self.field_slice_viewer
+                        self.slice_viewer
                             .move_to(self.setting.viewer_setting.slice_pos);
                         update_flag |= UpdateFlag::UPDATE_SLICE_POS;
                     }
                     if Drag::new("Slice Z").build(ui, &mut self.setting.viewer_setting.slice_pos[2])
                     {
-                        self.field_slice_viewer
+                        self.slice_viewer
                             .move_to(self.setting.viewer_setting.slice_pos);
                         update_flag |= UpdateFlag::UPDATE_SLICE_POS;
                     }
@@ -470,7 +517,7 @@ impl App {
                         .range_degrees(0.0, 360.0)
                         .build(ui, &mut self.setting.viewer_setting.slice_angle[0])
                     {
-                        self.field_slice_viewer
+                        self.slice_viewer
                             .rotate_to(self.setting.viewer_setting.slice_angle);
                         update_flag |= UpdateFlag::UPDATE_SLICE_POS;
                     }
@@ -478,7 +525,7 @@ impl App {
                         .range_degrees(0.0, 360.0)
                         .build(ui, &mut self.setting.viewer_setting.slice_angle[1])
                     {
-                        self.field_slice_viewer
+                        self.slice_viewer
                             .rotate_to(self.setting.viewer_setting.slice_angle);
                         update_flag |= UpdateFlag::UPDATE_SLICE_POS;
                     }
@@ -486,7 +533,7 @@ impl App {
                         .range_degrees(0.0, 360.0)
                         .build(ui, &mut self.setting.viewer_setting.slice_angle[2])
                     {
-                        self.field_slice_viewer
+                        self.slice_viewer
                             .rotate_to(self.setting.viewer_setting.slice_angle);
                         update_flag |= UpdateFlag::UPDATE_SLICE_POS;
                     }
@@ -509,98 +556,23 @@ impl App {
                     ui.separator();
                     if ui.small_button("xy") {
                         self.setting.viewer_setting.slice_angle = [0., 0., 0.];
-                        self.field_slice_viewer
+                        self.slice_viewer
                             .rotate_to(self.setting.viewer_setting.slice_angle);
                         update_flag |= UpdateFlag::UPDATE_SLICE_POS;
                     }
                     ui.same_line();
                     if ui.small_button("yz") {
                         self.setting.viewer_setting.slice_angle = [0., -PI / 2., 0.];
-                        self.field_slice_viewer
+                        self.slice_viewer
                             .rotate_to(self.setting.viewer_setting.slice_angle);
                         update_flag |= UpdateFlag::UPDATE_SLICE_POS;
                     }
                     ui.same_line();
                     if ui.small_button("zx") {
                         self.setting.viewer_setting.slice_angle = [PI / 2., 0., 0.];
-                        self.field_slice_viewer
+                        self.slice_viewer
                             .rotate_to(self.setting.viewer_setting.slice_angle);
                         update_flag |= UpdateFlag::UPDATE_SLICE_POS;
-                    }
-
-                    #[cfg(feature = "offscreen_renderer")]
-                    {
-                        ui.separator();
-                        ui.text("Save as file");
-                        InputText::new(
-                            ui,
-                            "path to image",
-                            &mut self.offscreen_render_sys.save_path,
-                        )
-                        .build();
-                        if ui.small_button("save") {
-                            self.offscreen_render_sys.offscreen_renderer.update(
-                                &self.sources,
-                                &self.field_slice_viewer,
-                                &self.setting.viewer_setting,
-                                self.offscreen_render_sys.update_flag_for_save,
-                            );
-                            self.offscreen_render_sys.update_flag_for_save = UpdateFlag::empty();
-                            self.offscreen_render_sys
-                                .offscreen_renderer
-                                .calculate_field(&self.sources, &self.setting.viewer_setting);
-                            let bb = (
-                                self.setting.viewer_setting.slice_width as usize,
-                                self.setting.viewer_setting.slice_height as usize,
-                            );
-                            self.offscreen_render_sys.offscreen_renderer.save(
-                                &self.offscreen_render_sys.save_path,
-                                bb,
-                                self.field_slice_viewer.color_map(),
-                            );
-                        }
-
-                        ui.separator();
-                        InputText::new(
-                            ui,
-                            "path to recorded images",
-                            &mut self.offscreen_render_sys.record_path,
-                        )
-                        .build();
-                        if ui.small_button(if self.offscreen_render_sys.recording {
-                            "stop recording"
-                        } else {
-                            "record"
-                        }) {
-                            self.offscreen_render_sys.recording =
-                                !self.offscreen_render_sys.recording;
-                        }
-                        if self.offscreen_render_sys.recording {
-                            self.offscreen_render_sys.offscreen_renderer.update(
-                                &self.sources,
-                                &self.field_slice_viewer,
-                                &self.setting.viewer_setting,
-                                self.offscreen_render_sys.update_flag_for_save,
-                            );
-                            self.offscreen_render_sys.update_flag_for_save = UpdateFlag::empty();
-                            self.offscreen_render_sys
-                                .offscreen_renderer
-                                .calculate_field(&self.sources, &self.setting.viewer_setting);
-                            let bb = (
-                                self.setting.viewer_setting.slice_width as usize,
-                                self.setting.viewer_setting.slice_height as usize,
-                            );
-                            std::fs::create_dir_all(&self.offscreen_render_sys.record_path)
-                                .unwrap();
-                            let date = chrono::Local::now();
-                            let path = Path::new(&self.offscreen_render_sys.record_path)
-                                .join(format!("{}", date.format("%Y-%m-%d_%H-%M-%S_%3f.png")));
-                            self.offscreen_render_sys.offscreen_renderer.save(
-                                &path,
-                                bb,
-                                self.field_slice_viewer.color_map(),
-                            );
-                        }
                     }
                 });
                 TabItem::new("Camera").build(ui, || {
@@ -608,25 +580,25 @@ impl App {
                     if Drag::new("Camera X")
                         .build(ui, &mut self.setting.viewer_setting.camera_pos[0])
                     {
-                        render_sys.camera.position = self.setting.viewer_setting.camera_pos;
+                        renderer.camera.position = self.setting.viewer_setting.camera_pos;
                         self.view_projection =
-                            render_sys.get_view_projection(&self.setting.viewer_setting);
+                            renderer.get_view_projection(&self.setting.viewer_setting);
                         update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
                     }
                     if Drag::new("Camera Y")
                         .build(ui, &mut self.setting.viewer_setting.camera_pos[1])
                     {
-                        render_sys.camera.position = self.setting.viewer_setting.camera_pos;
+                        renderer.camera.position = self.setting.viewer_setting.camera_pos;
                         self.view_projection =
-                            render_sys.get_view_projection(&self.setting.viewer_setting);
+                            renderer.get_view_projection(&self.setting.viewer_setting);
                         update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
                     }
                     if Drag::new("Camera Z")
                         .build(ui, &mut self.setting.viewer_setting.camera_pos[2])
                     {
-                        render_sys.camera.position = self.setting.viewer_setting.camera_pos;
+                        renderer.camera.position = self.setting.viewer_setting.camera_pos;
                         self.view_projection =
-                            render_sys.get_view_projection(&self.setting.viewer_setting);
+                            renderer.get_view_projection(&self.setting.viewer_setting);
                         update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
                     }
 
@@ -637,11 +609,11 @@ impl App {
                         .build(ui, &mut self.setting.viewer_setting.camera_angle[0])
                     {
                         camera_helper::set_camera_angle(
-                            &mut render_sys.camera,
+                            &mut renderer.camera,
                             self.setting.viewer_setting.camera_angle,
                         );
                         self.view_projection =
-                            render_sys.get_view_projection(&self.setting.viewer_setting);
+                            renderer.get_view_projection(&self.setting.viewer_setting);
                         update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
                     }
                     if AngleSlider::new("Camera RY")
@@ -649,11 +621,11 @@ impl App {
                         .build(ui, &mut self.setting.viewer_setting.camera_angle[1])
                     {
                         camera_helper::set_camera_angle(
-                            &mut render_sys.camera,
+                            &mut renderer.camera,
                             self.setting.viewer_setting.camera_angle,
                         );
                         self.view_projection =
-                            render_sys.get_view_projection(&self.setting.viewer_setting);
+                            renderer.get_view_projection(&self.setting.viewer_setting);
                         update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
                     }
                     if AngleSlider::new("Camera RZ")
@@ -661,11 +633,11 @@ impl App {
                         .build(ui, &mut self.setting.viewer_setting.camera_angle[2])
                     {
                         camera_helper::set_camera_angle(
-                            &mut render_sys.camera,
+                            &mut renderer.camera,
                             self.setting.viewer_setting.camera_angle,
                         );
                         self.view_projection =
-                            render_sys.get_view_projection(&self.setting.viewer_setting);
+                            renderer.get_view_projection(&self.setting.viewer_setting);
                         update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
                     }
 
@@ -673,7 +645,7 @@ impl App {
                     Drag::new("camera speed")
                         .range(0.0, f32::INFINITY)
                         .speed(0.1)
-                        .build(ui, &mut self.setting.camera_move_speed);
+                        .build(ui, &mut self.setting.viewer_setting.camera_move_speed);
 
                     ui.separator();
                     ui.text("Camera perspective");
@@ -682,7 +654,7 @@ impl App {
                         .build(ui, &mut self.setting.viewer_setting.fov)
                     {
                         self.view_projection =
-                            render_sys.get_view_projection(&self.setting.viewer_setting);
+                            renderer.get_view_projection(&self.setting.viewer_setting);
                         update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
                     }
                     if Drag::new("Near clip")
@@ -690,7 +662,7 @@ impl App {
                         .build(ui, &mut self.setting.viewer_setting.near_clip)
                     {
                         self.view_projection =
-                            render_sys.get_view_projection(&self.setting.viewer_setting);
+                            renderer.get_view_projection(&self.setting.viewer_setting);
                         update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
                     }
                     if Drag::new("Far clip")
@@ -698,7 +670,7 @@ impl App {
                         .build(ui, &mut self.setting.viewer_setting.far_clip)
                     {
                         self.view_projection =
-                            render_sys.get_view_projection(&self.setting.viewer_setting);
+                            renderer.get_view_projection(&self.setting.viewer_setting);
                         update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
                     }
                 });
@@ -722,19 +694,25 @@ impl App {
                         ui.text(format!("Device {}", i));
                         ui.same_line();
                         if ui.checkbox(&format!("show##{}", i), &mut self.setting.show[i]) {
-                            for j in (i * NUM_TRANS_IN_UNIT)..(i + 1) * NUM_TRANS_IN_UNIT {
-                                self.sources[j]
-                                    .flag
-                                    .set(SourceFlag::HIDDEN, !self.setting.show[i]);
+                            for trans in self
+                                .sources
+                                .drives_mut()
+                                .skip(i * NUM_TRANS_IN_UNIT)
+                                .take(NUM_TRANS_IN_UNIT)
+                            {
+                                trans.visible = if self.setting.show[i] { 1.0 } else { 0.0 };
                             }
                             update_flag |= UpdateFlag::UPDATE_SOURCE_FLAG;
                         }
                         ui.same_line();
                         if ui.checkbox(&format!("enable##{}", i), &mut self.setting.enable[i]) {
-                            for j in (i * NUM_TRANS_IN_UNIT)..(i + 1) * NUM_TRANS_IN_UNIT {
-                                self.sources[j]
-                                    .flag
-                                    .set(SourceFlag::DISABLE, !self.setting.enable[i]);
+                            for trans in self
+                                .sources
+                                .drives_mut()
+                                .skip(i * NUM_TRANS_IN_UNIT)
+                                .take(NUM_TRANS_IN_UNIT)
+                            {
+                                trans.enable = if self.setting.enable[i] { 1.0 } else { 0.0 };
                             }
                             update_flag |= UpdateFlag::UPDATE_SOURCE_FLAG;
                         }
@@ -821,7 +799,7 @@ impl App {
                         }
                     }
 
-                    if self.fpga_flag.contains(FPGAControlFlags::OP_MODE) {
+                    if self.fpga_flag.contains(FPGAControlFlags::SEQ_MODE) {
                         ui.separator();
                         if let Some(seq) = &self.point_sequence {
                             ui.text("PointSequence mode");
@@ -854,12 +832,9 @@ impl App {
                             ui.text(format!(
                                 "Gain mode: {}",
                                 match seq.gain_mode {
-                                    autd3_core::hardware_defined::GainMode::DutyPhaseFull =>
-                                        "DutyPhaseFull",
-                                    autd3_core::hardware_defined::GainMode::PhaseFull =>
-                                        "PhaseFull",
-                                    autd3_core::hardware_defined::GainMode::PhaseHalf =>
-                                        "PhaseHalf",
+                                    GainMode::DutyPhaseFull => "DutyPhaseFull",
+                                    GainMode::PhaseFull => "PhaseFull",
+                                    GainMode::PhaseHalf => "PhaseHalf",
                                 }
                             ));
                             ui.text(format!("Sequence size: {}", seq.seq_data.len()));
@@ -915,8 +890,8 @@ impl App {
                     );
                     ui.checkbox_flags("SILENT", &mut flag, FPGAControlFlags::SILENT);
                     ui.checkbox_flags("FORCE FAN", &mut flag, FPGAControlFlags::FORCE_FAN);
-                    ui.checkbox_flags("OP MODE", &mut flag, FPGAControlFlags::OP_MODE);
                     ui.checkbox_flags("SEQ MODE", &mut flag, FPGAControlFlags::SEQ_MODE);
+                    ui.checkbox_flags("SEQ GAIN MODE", &mut flag, FPGAControlFlags::SEQ_GAIN_MODE);
 
                     ui.separator();
                     ui.text("CPU flag");
@@ -931,6 +906,7 @@ impl App {
                         CPUControlFlags::READS_FPGA_INFO,
                     );
                     ui.checkbox_flags("WRITE BODY", &mut flag, CPUControlFlags::WRITE_BODY);
+                    ui.checkbox_flags("WAIT ON SYNC", &mut flag, CPUControlFlags::WAIT_ON_SYNC);
                 });
                 TabItem::new("Log").build(ui, || {
                     if ui.radio_button_bool("enable", self.setting.log_enable) {
@@ -943,6 +919,23 @@ impl App {
                     }
                 });
             });
+
+            ui.separator();
+            ui.text("Save as file");
+            InputText::new(ui, "path to image", &mut self.setting.save_file_path).build();
+            if ui.small_button("save") {
+                self.save_image = true;
+            }
+
+            ui.separator();
+            InputText::new(ui, "path to recorded images", &mut self.setting.record_path).build();
+            if ui.small_button(if self.recording {
+                "stop recording"
+            } else {
+                "record"
+            }) {
+                self.recording = !self.recording;
+            }
 
             ui.separator();
 
@@ -965,41 +958,65 @@ impl App {
                 );
 
                 self.setting.viewer_setting.camera_pos = p;
-                render_sys.camera.position = p;
-                render_sys.camera.right = right;
-                render_sys.camera.up = up;
-                render_sys.camera.look_at(vecmath_util::to_vec3(
+                renderer.camera.position = p;
+                renderer.camera.right = right;
+                renderer.camera.up = up;
+                renderer.camera.look_at(vecmath_util::to_vec3(
                     &self.setting.viewer_setting.slice_pos,
                 ));
                 self.setting.viewer_setting.camera_angle =
                     camera_helper::rot_mat_to_euler_angles(&[
-                        render_sys.camera.right,
-                        render_sys.camera.up,
-                        render_sys.camera.forward,
+                        renderer.camera.right,
+                        renderer.camera.up,
+                        renderer.camera.forward,
                     ]);
                 camera_helper::set_camera_angle(
-                    &mut render_sys.camera,
+                    &mut renderer.camera,
                     self.setting.viewer_setting.camera_angle,
                 );
-                self.view_projection = render_sys.get_view_projection(&self.setting.viewer_setting);
+                self.view_projection = renderer.get_view_projection(&self.setting.viewer_setting);
                 update_flag |= UpdateFlag::UPDATE_CAMERA_POS;
             }
 
             ui.same_line();
             if ui.small_button("reset") {
-                self.setting = Setting::load("setting.json");
-                self.reset(render_sys);
+                let show = self.setting.show.to_owned();
+                let enable = self.setting.enable.to_owned();
+                let show_axis = self.setting.show_axis.to_owned();
+                self.setting = Setting {
+                    show,
+                    enable,
+                    show_axis,
+                    ..Setting::load("setting.json")
+                };
+                self.reset(renderer);
                 update_flag = UpdateFlag::all();
             }
 
             ui.same_line();
             if ui.small_button("default") {
-                let default_setting = acoustic_field_viewer::view::ViewerSettings {
+                let viewer_setting = acoustic_field_viewer::ViewerSettings {
                     wave_length: self.setting.viewer_setting.wave_length,
+                    vsync: self.setting.viewer_setting.vsync,
                     ..Default::default()
                 };
-                self.setting.viewer_setting = default_setting;
-                self.reset(render_sys);
+                let show = self.setting.show.to_owned();
+                let enable = self.setting.enable.to_owned();
+                let show_axis = self.setting.show_axis.to_owned();
+                let port = self.setting.port;
+                let window_width = self.setting.window_width;
+                let window_height = self.setting.window_height;
+                self.setting = Setting {
+                    port,
+                    window_width,
+                    window_height,
+                    viewer_setting,
+                    show,
+                    enable,
+                    show_axis,
+                    ..Setting::new()
+                };
+                self.reset(renderer);
                 update_flag = UpdateFlag::all();
             }
         });
@@ -1023,7 +1040,7 @@ impl App {
             .phases
             .iter()
             .zip(gain.amps.iter())
-            .zip(self.sources.iter_mut())
+            .zip(self.sources.drives_mut())
         {
             source.amp = (amp as f32 / 510.0 * std::f32::consts::PI).sin();
             source.phase = 2.0 * PI * (1.0 - (phase as f32 / 255.0));
@@ -1031,9 +1048,9 @@ impl App {
     }
 
     fn calc_focus(&mut self, duty: u8, focus: Vector3) {
-        for source in self.sources.iter_mut() {
+        for (pos, source) in self.sources.positions_drives_mut() {
             source.amp = (duty as f32 / 510.0 * std::f32::consts::PI).sin();
-            let dist = vecmath_util::dist(source.pos, focus);
+            let dist = vecmath_util::dist(vecmath_util::to_vec3(pos), focus);
             let phase = (dist / self.seq_wavelength) % 1.0;
             source.phase = 2.0 * PI * (1.0 - phase);
         }
@@ -1061,15 +1078,135 @@ impl App {
     }
 }
 
+fn init_imgui(renderer: &Renderer) -> (Context, WinitPlatform, imgui_vulkano_renderer::Renderer) {
+    let mut imgui = Context::create();
+
+    let mut platform = WinitPlatform::init(&mut imgui);
+    platform.attach_window(imgui.io_mut(), renderer.window(), HiDpiMode::Default);
+
+    let hidpi_factor = platform.hidpi_factor();
+    let font_size = (16.0 * hidpi_factor) as f32;
+    imgui.fonts().add_font(&[FontSource::TtfData {
+        data: include_bytes!("../../assets/fonts/NotoSans-Regular.ttf"),
+        size_pixels: font_size,
+        config: Some(FontConfig {
+            rasterizer_multiply: 1.,
+            glyph_ranges: FontGlyphRanges::default(),
+            ..FontConfig::default()
+        }),
+    }]);
+
+    imgui.io_mut().font_global_scale = (1.0 / hidpi_factor) as f32;
+
+    let renderer = imgui_vulkano_renderer::Renderer::init(
+        &mut imgui,
+        renderer.device(),
+        renderer.queue(),
+        vulkano::format::Format::B8G8R8A8_UNORM,
+    )
+    .expect("Failed to initialize renderer");
+    (imgui, platform, renderer)
+}
 pub fn main() {
     let setting = Setting::load("setting.json");
-    let system = System::init(
+
+    let mut event_loop = EventLoop::new();
+    let mut renderer = Renderer::new(
+        &event_loop,
         "AUTD3 emulator",
         setting.window_width as _,
         setting.window_height as _,
         setting.viewer_setting.vsync,
     );
 
-    let mut app = App::new(setting, &system);
-    app.run(system);
+    let mut app = App::new(setting, &renderer);
+    app.reset(&mut renderer);
+
+    let (mut imgui, mut platform, mut imgui_renderer) = init_imgui(&renderer);
+
+    let mut autd_server = AutdServer::new(&format!("127.0.0.1:{}", app.setting.port)).unwrap();
+
+    let mut is_running = true;
+    while is_running {
+        event_loop.run_return(|event, _, control_flow| {
+            *control_flow = ControlFlow::Exit;
+            platform.handle_event(imgui.io_mut(), renderer.window(), &event);
+            match &event {
+                Event::WindowEvent {
+                    event: WindowEvent::CloseRequested,
+                    ..
+                } => {
+                    is_running = false;
+                }
+                Event::WindowEvent {
+                    event: WindowEvent::Resized(..) | WindowEvent::ScaleFactorChanged { .. },
+                    ..
+                } => {
+                    renderer.resize();
+                }
+                _ => (),
+            }
+
+            let before_pipeline_future = match renderer.start_frame() {
+                Err(e) => {
+                    eprintln!("{}", e.to_string());
+                    return;
+                }
+                Ok(future) => future,
+            };
+            let after_future = app.render(
+                &mut renderer,
+                &mut imgui,
+                &mut platform,
+                &mut imgui_renderer,
+                &mut autd_server,
+                before_pipeline_future,
+            );
+            renderer.finish_frame(after_future);
+
+            if app.save_image || app.recording {
+                let image = app.slice_viewer.field_image_view();
+                let result = image.read().unwrap();
+
+                use image::png::PngEncoder;
+                use image::ColorType;
+                use std::fs::File;
+
+                let width = app.setting.viewer_setting.slice_width
+                    / app.setting.viewer_setting.slice_pixel_size;
+                let height = app.setting.viewer_setting.slice_height
+                    / app.setting.viewer_setting.slice_pixel_size;
+                let pixels: Vec<_> = (&result[0..(width as usize * height as usize)])
+                    .chunks_exact(width as _)
+                    .rev()
+                    .flatten()
+                    .map(|&c| vecmath_util::vec4_map(c, |v| (v * 255.0) as u8))
+                    .flatten()
+                    .collect();
+
+                if app.save_image {
+                    let output = File::create(&app.setting.save_file_path).unwrap();
+                    let encoder = PngEncoder::new(output);
+                    encoder
+                        .encode(&pixels, width, height, ColorType::Rgba8)
+                        .unwrap();
+                }
+
+                if app.recording {
+                    std::fs::create_dir_all(&app.setting.record_path).unwrap();
+                    let date = chrono::Local::now();
+                    let path = Path::new(&app.setting.record_path)
+                        .join(format!("{}", date.format("%Y-%m-%d_%H-%M-%S_%3f.png")));
+                    let output = File::create(path).unwrap();
+                    let encoder = PngEncoder::new(output);
+                    encoder
+                        .encode(&pixels, width, height, ColorType::Rgba8)
+                        .unwrap();
+                }
+            }
+        });
+    }
+
+    app.setting.merge_render_sys(&renderer);
+    app.setting.save("setting.json");
 }

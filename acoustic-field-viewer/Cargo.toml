@@ -1,25 +1,24 @@
 [package]
-name = "autd-emulator"
+name = "acoustic-field-viewer"
 version = "0.7.0"
-authors = ["shun suzuki <suzuki@hapis.k.u-tokyo.ac.jp>"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-acoustic-field-viewer = {path="../acoustic-field-viewer"}
 autd3-core = "1.10.0"
-autd3-emulator-server = {path="../autd3-emulator-server"}
+bitflags = "1.3.2"
 camera_controllers = "0.32.0"
-chrono = "0.4.19"
-image = "0.23.14"
 imgui = "0.8.0"
 imgui-vulkano-renderer = {git = "https://github.com/sssssssuzuki/imgui-vulkano-renderer.git"}
 imgui-winit-support = "0.8.0"
+png = "0.17.2"
 quaternion = "0.4.1"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+scarlet = "1.1.0"
+serde = { version = "1.0.130", features = ["derive"] }
+vulkano = "0.27.1"
+vulkano-shaders = "0.27.1"
+vulkano-win = "0.27.1"
+winit = "0.25.0" #imgui depends winit 0.25
 vecmath = "1.0.0"
 vecmath-util = {path="../vecmath-util"}
-vulkano = "0.27.1"
-winit = "0.25.0" #imgui depends winit 0.25
