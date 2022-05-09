@@ -4,7 +4,7 @@
  * Created Date: 11/11/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 17/12/2021
+ * Last Modified: 09/05/2022
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -13,10 +13,11 @@
 
 use std::sync::Arc;
 
+use bytemuck::{Pod, Zeroable};
 use vulkano::{
     buffer::{BufferUsage, CpuAccessibleBuffer, CpuBufferPool, TypedBufferAccess},
     command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer},
-    descriptor_set::PersistentDescriptorSet,
+    descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet},
     device::Device,
     image::{view::ImageView, StorageImage},
     pipeline::{
@@ -37,12 +38,30 @@ use crate::{
 
 pub type FieldImageView = Arc<ImageView<Arc<StorageImage>>>;
 
-#[derive(Default, Debug, Clone)]
+#[repr(C)]
+#[derive(Default, Debug, Copy, Clone, Zeroable, Pod)]
 struct Vertex {
     position: [f32; 3],
     tex_coords: [f32; 2],
 }
 vulkano::impl_vertex!(Vertex, position, tex_coords);
+
+#[repr(C)]
+#[derive(Default, Debug, Copy, Clone, Zeroable, Pod)]
+struct Data {
+    world: Matrix4,
+    view: Matrix4,
+    proj: Matrix4,
+}
+
+#[repr(C)]
+#[derive(Default, Debug, Copy, Clone, Zeroable, Pod)]
+struct Config {
+    width: u32,
+    height: u32,
+    _dummy_0: u32,
+    _dummy_1: u32,
+}
 
 #[allow(clippy::needless_question_mark)]
 mod vs {
@@ -170,44 +189,40 @@ impl SliceViewer {
         &mut self,
         image: Arc<CpuAccessibleBuffer<[Vector4]>>,
     ) -> Arc<PersistentDescriptorSet> {
-        let layout = self
-            .pipeline
-            .layout()
-            .descriptor_set_layouts()
-            .get(0)
-            .unwrap();
+        let layout = self.pipeline.layout().set_layouts().get(0).unwrap();
         let world_view_proj_buf =
-            CpuBufferPool::<vs::ty::Data>::new(self.device.clone(), BufferUsage::all());
+            CpuBufferPool::<Data>::new(self.device.clone(), BufferUsage::all());
         let uniform_buffer_subbuffer = {
-            let uniform_data = vs::ty::Data {
+            let uniform_data = Data {
                 world: self.model,
                 view: self.view_projection.0,
                 proj: self.view_projection.1,
             };
             world_view_proj_buf.next(uniform_data).unwrap()
         };
-        let mut set_builder = PersistentDescriptorSet::start(layout.clone());
-        set_builder
-            .add_buffer(Arc::new(uniform_buffer_subbuffer))
-            .unwrap();
+        let write_desc_uni = WriteDescriptorSet::buffer(0, uniform_buffer_subbuffer);
 
-        let config_buf =
-            CpuBufferPool::<fs::ty::Config>::new(self.device.clone(), BufferUsage::all());
+        let config_buf = CpuBufferPool::<Config>::new(self.device.clone(), BufferUsage::all());
         let uniform_buffer_subbuffer = {
-            let uniform_data = fs::ty::Config {
+            let uniform_data = Config {
                 width: self.slice_size[0],
                 height: self.slice_size[1],
-                dummy_0: 0,
-                dummy_1: 0,
+                _dummy_0: 0,
+                _dummy_1: 0,
             };
             config_buf.next(uniform_data).unwrap()
         };
-        set_builder
-            .add_buffer(Arc::new(uniform_buffer_subbuffer))
-            .unwrap();
+        let write_desc_conf = WriteDescriptorSet::buffer(1, uniform_buffer_subbuffer);
 
-        set_builder.add_buffer(image).unwrap();
-        set_builder.build().unwrap()
+        PersistentDescriptorSet::new(
+            layout.clone(),
+            [
+                write_desc_uni,
+                write_desc_conf,
+                WriteDescriptorSet::buffer(2, image),
+            ],
+        )
+        .unwrap()
     }
 
     fn create_field_image_view(

@@ -1,5 +1,15 @@
-#[macro_use]
-extern crate bitflags;
+/*
+ * File: lib.rs
+ * Project: src
+ * Created Date: 17/12/2021
+ * Author: Shun Suzuki
+ * -----
+ * Last Modified: 09/05/2022
+ * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
+ * -----
+ * Copyright (c) 2022 Hapis Lab. All rights reserved.
+ *
+ */
 
 pub mod camera_helper;
 pub mod common;

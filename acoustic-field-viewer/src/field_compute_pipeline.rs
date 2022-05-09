@@ -4,7 +4,7 @@
  * Created Date: 28/11/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 17/12/2021
+ * Last Modified: 09/05/2022
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -13,16 +13,17 @@
 
 use std::{f32::consts::PI, sync::Arc};
 
+use bytemuck::{Pod, Zeroable};
 use scarlet::{colormap::ColorMap, prelude::*};
 use vulkano::{
     buffer::{BufferUsage, CpuAccessibleBuffer},
     command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, PrimaryCommandBuffer},
-    descriptor_set::PersistentDescriptorSet,
+    descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet},
     device::Queue,
     format::Format,
     image::{view::ImageView, ImageDimensions, ImmutableImage, MipmapsCount},
     pipeline::{ComputePipeline, Pipeline, PipelineBindPoint},
-    sampler::{Filter, MipmapMode, Sampler, SamplerAddressMode},
+    sampler::{Filter, Sampler, SamplerAddressMode, SamplerCreateInfo, SamplerMipmapMode},
     sync::GpuFuture,
 };
 
@@ -30,6 +31,20 @@ use crate::{
     sound_sources::{Drive, SoundSources},
     Matrix4, UpdateFlag, Vector4, ViewerSettings,
 };
+
+#[repr(C)]
+#[derive(Default, Debug, Copy, Clone, Zeroable, Pod)]
+struct Config {
+    source_num: u32,
+    wave_num: f32,
+    color_scale: f32,
+    width: u32,
+    height: u32,
+    pixel_size: u32,
+    _dummy_0: u32,
+    _dummy_1: i32,
+    world: Matrix4,
+}
 
 pub struct FieldComputePipeline {
     queue: Arc<Queue>,
@@ -94,28 +109,28 @@ impl FieldComputePipeline {
                 queue.clone(),
             )
             .unwrap();
-            (ImageView::new(image).unwrap(), future)
+            (ImageView::new_default(image).unwrap(), future)
         };
 
         let sampler = Sampler::new(
             queue.device().clone(),
-            Filter::Linear,
-            Filter::Linear,
-            MipmapMode::Nearest,
-            SamplerAddressMode::ClampToEdge,
-            SamplerAddressMode::ClampToEdge,
-            SamplerAddressMode::ClampToEdge,
-            0.0,
-            1.0,
-            0.0,
-            0.0,
+            SamplerCreateInfo {
+                mag_filter: Filter::Linear,
+                min_filter: Filter::Linear,
+                mipmap_mode: SamplerMipmapMode::Nearest,
+                address_mode: [SamplerAddressMode::ClampToEdge; 3],
+                mip_lod_bias: 0.0,
+                ..Default::default()
+            },
         )
         .unwrap();
 
-        let layout = pipeline.layout().descriptor_set_layouts().get(4).unwrap();
-        let mut set_builder = PersistentDescriptorSet::start(layout.clone());
-        set_builder.add_sampled_image(texture, sampler).unwrap();
-        set_builder.build().unwrap()
+        let layout = pipeline.layout().set_layouts().get(4).unwrap();
+        PersistentDescriptorSet::new(
+            layout.clone(),
+            [WriteDescriptorSet::image_view_sampler(0, texture, sampler)],
+        )
+        .unwrap()
     }
 
     pub fn update(
@@ -151,10 +166,12 @@ impl FieldComputePipeline {
         settings: &ViewerSettings,
     ) -> Box<dyn GpuFuture> {
         let pipeline_layout = self.pipeline.layout();
-        let desc_layout = pipeline_layout.descriptor_set_layouts().get(0).unwrap();
-        let mut desc_set_builder = PersistentDescriptorSet::start(desc_layout.clone());
-        desc_set_builder.add_buffer(image).unwrap();
-        let set = desc_set_builder.build().unwrap();
+        let desc_layout = pipeline_layout.set_layouts().get(0).unwrap();
+        let set = PersistentDescriptorSet::new(
+            desc_layout.clone(),
+            [WriteDescriptorSet::buffer(0, image)],
+        )
+        .unwrap();
         let mut builder = AutoCommandBufferBuilder::primary(
             self.queue.device().clone(),
             self.queue.family(),
@@ -164,7 +181,7 @@ impl FieldComputePipeline {
 
         let config_buffer = {
             let source_num = sources.len() as u32;
-            let config = cs::ty::Config {
+            let config = Config {
                 source_num,
                 wave_num: 2.0 * PI / settings.wave_length,
                 color_scale: settings.color_scale,
@@ -183,39 +200,32 @@ impl FieldComputePipeline {
             )
             .unwrap()
         };
-        let layout = self
-            .pipeline
-            .layout()
-            .descriptor_set_layouts()
-            .get(1)
-            .unwrap();
-        let mut set_builder = PersistentDescriptorSet::start(layout.clone());
-        set_builder.add_buffer(config_buffer).unwrap();
-        let set_1 = set_builder.build().unwrap();
+        let layout = self.pipeline.layout().set_layouts().get(1).unwrap();
+        let set_1 = PersistentDescriptorSet::new(
+            layout.clone(),
+            [WriteDescriptorSet::buffer(0, config_buffer)],
+        )
+        .unwrap();
 
-        let layout = self
-            .pipeline
-            .layout()
-            .descriptor_set_layouts()
-            .get(2)
-            .unwrap();
-        let mut set_builder = PersistentDescriptorSet::start(layout.clone());
-        set_builder
-            .add_buffer(self.source_pos_buf.clone().unwrap())
-            .unwrap();
-        let set_2 = set_builder.build().unwrap();
+        let layout = self.pipeline.layout().set_layouts().get(2).unwrap();
+        let set_2 = PersistentDescriptorSet::new(
+            layout.clone(),
+            [WriteDescriptorSet::buffer(
+                0,
+                self.source_pos_buf.clone().unwrap(),
+            )],
+        )
+        .unwrap();
 
-        let layout = self
-            .pipeline
-            .layout()
-            .descriptor_set_layouts()
-            .get(3)
-            .unwrap();
-        let mut set_builder = PersistentDescriptorSet::start(layout.clone());
-        set_builder
-            .add_buffer(self.source_drive_buf.clone().unwrap())
-            .unwrap();
-        let set_3 = set_builder.build().unwrap();
+        let layout = self.pipeline.layout().set_layouts().get(3).unwrap();
+        let set_3 = PersistentDescriptorSet::new(
+            layout.clone(),
+            [WriteDescriptorSet::buffer(
+                0,
+                self.source_drive_buf.clone().unwrap(),
+            )],
+        )
+        .unwrap();
 
         builder
             .bind_pipeline_compute(self.pipeline.clone())

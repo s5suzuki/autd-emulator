@@ -4,7 +4,7 @@
  * Created Date: 30/11/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 17/12/2021
+ * Last Modified: 09/05/2022
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -13,10 +13,11 @@
 
 use std::{f32::consts::PI, io::Cursor, sync::Arc};
 
+use bytemuck::{Pod, Zeroable};
 use vulkano::{
     buffer::{BufferUsage, CpuAccessibleBuffer, CpuBufferPool, TypedBufferAccess},
     command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer},
-    descriptor_set::PersistentDescriptorSet,
+    descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet},
     device::{Device, Queue},
     format::Format,
     image::{
@@ -32,7 +33,7 @@ use vulkano::{
         GraphicsPipeline, Pipeline, PipelineBindPoint,
     },
     render_pass::Subpass,
-    sampler::{Filter, MipmapMode, Sampler, SamplerAddressMode},
+    sampler::{Filter, Sampler, SamplerAddressMode, SamplerCreateInfo, SamplerMipmapMode},
 };
 
 use crate::{
@@ -47,7 +48,7 @@ use crate::{
 pub type FieldImageView = Arc<ImageView<Arc<StorageImage>>>;
 
 #[repr(C)]
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Copy, Clone, Zeroable, Pod)]
 struct Vertex {
     position: [f32; 4],
     tex_coords: [f32; 2],
@@ -55,14 +56,21 @@ struct Vertex {
 vulkano::impl_vertex!(Vertex, position, tex_coords);
 
 #[repr(C)]
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Copy, Clone, Zeroable, Pod)]
+struct Data {
+    view: Matrix4,
+    proj: Matrix4,
+}
+
+#[repr(C)]
+#[derive(Default, Debug, Copy, Clone, Zeroable, Pod)]
 struct ModelInstanceData {
     model: Matrix4,
 }
 vulkano::impl_vertex!(ModelInstanceData, model);
 
 #[repr(C)]
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Copy, Clone, Zeroable, Pod)]
 struct ColorInstanceData {
     color: Vector4,
 }
@@ -87,8 +95,8 @@ mod fs {
 pub struct TransViewer {
     vertices: Arc<CpuAccessibleBuffer<[Vertex]>>,
     indices: Arc<CpuAccessibleBuffer<[u32]>>,
-    model_instance_data: Arc<CpuAccessibleBuffer<[ModelInstanceData]>>,
-    color_instance_data: Arc<CpuAccessibleBuffer<[ColorInstanceData]>>,
+    model_instance_data: Option<Arc<CpuAccessibleBuffer<[ModelInstanceData]>>>,
+    color_instance_data: Option<Arc<CpuAccessibleBuffer<[ColorInstanceData]>>>,
     device: Arc<Device>,
     pipeline: Arc<GraphicsPipeline>,
     view_projection: (Matrix4, Matrix4),
@@ -101,12 +109,6 @@ impl TransViewer {
         let device = renderer.device();
         let vertices = Self::create_vertices(device.clone());
         let indices = Self::create_indices(device.clone());
-        let empty = SoundSources::new();
-        let model_instance_data =
-            Self::create_model_instance_data(renderer.device(), settings, &empty);
-        let coloring_method = coloring_hsv;
-        let color_instance_data =
-            Self::create_color_instance_data(renderer.device(), settings, &empty, coloring_method);
 
         let vs = vs::load(device.clone()).unwrap();
         let fs = fs::load(device.clone()).unwrap();
@@ -133,13 +135,13 @@ impl TransViewer {
         Self {
             vertices,
             indices,
-            model_instance_data,
-            color_instance_data,
+            model_instance_data: None,
+            color_instance_data: None,
             device,
             pipeline,
             view_projection: renderer.get_view_projection(settings),
             texture_desc_set,
-            coloring_method,
+            coloring_method: coloring_hsv,
         }
     }
 
@@ -152,14 +154,17 @@ impl TransViewer {
         update_flag: UpdateFlag,
     ) {
         if update_flag.contains(UpdateFlag::INIT_SOURCE) {
-            self.model_instance_data =
-                Self::create_model_instance_data(renderer.device(), settings, sources);
-            self.color_instance_data = Self::create_color_instance_data(
+            self.model_instance_data = Some(Self::create_model_instance_data(
+                renderer.device(),
+                settings,
+                sources,
+            ));
+            self.color_instance_data = Some(Self::create_color_instance_data(
                 renderer.device(),
                 settings,
                 sources,
                 self.coloring_method,
-            );
+            ));
         }
 
         if update_flag.contains(UpdateFlag::UPDATE_CAMERA_POS) {
@@ -170,62 +175,48 @@ impl TransViewer {
             || update_flag.contains(UpdateFlag::UPDATE_SOURCE_ALPHA)
             || update_flag.contains(UpdateFlag::UPDATE_SOURCE_FLAG)
         {
-            self.color_instance_data = Self::create_color_instance_data(
+            self.color_instance_data = Some(Self::create_color_instance_data(
                 renderer.device(),
                 settings,
                 sources,
                 self.coloring_method,
-            );
+            ));
         }
     }
 
     pub fn render(&mut self, builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>) {
-        let layout = self
-            .pipeline
-            .layout()
-            .descriptor_set_layouts()
-            .get(0)
-            .unwrap();
+        let layout = self.pipeline.layout().set_layouts().get(0).unwrap();
         let world_view_proj_buf =
-            CpuBufferPool::<vs::ty::Data>::new(self.device.clone(), BufferUsage::all());
+            CpuBufferPool::<Data>::new(self.device.clone(), BufferUsage::all());
         let uniform_buffer_subbuffer = {
-            let uniform_data = vs::ty::Data {
+            let uniform_data = Data {
                 view: self.view_projection.0,
                 proj: self.view_projection.1,
             };
             world_view_proj_buf.next(uniform_data).unwrap()
         };
-        let mut set_builder = PersistentDescriptorSet::start(layout.clone());
-        set_builder
-            .add_buffer(Arc::new(uniform_buffer_subbuffer))
-            .unwrap();
-        let desc_set = set_builder.build().unwrap();
+        let desc_set = PersistentDescriptorSet::new(
+            layout.clone(),
+            [WriteDescriptorSet::buffer(0, uniform_buffer_subbuffer)],
+        )
+        .unwrap();
 
-        builder
-            .bind_pipeline_graphics(self.pipeline.clone())
-            .bind_descriptor_sets(
-                PipelineBindPoint::Graphics,
-                self.pipeline.layout().clone(),
-                0,
-                (desc_set, self.texture_desc_set.clone()),
-            )
-            .bind_vertex_buffers(
-                0,
-                (
-                    self.vertices.clone(),
-                    self.model_instance_data.clone(),
-                    self.color_instance_data.clone(),
-                ),
-            )
-            .bind_index_buffer(self.indices.clone())
-            .draw_indexed(
-                self.indices.len() as u32,
-                self.model_instance_data.len() as u32,
-                0,
-                0,
-                0,
-            )
-            .unwrap();
+        if let (Some(model), Some(color)) = (&self.color_instance_data, &self.model_instance_data) {
+            builder
+                .bind_pipeline_graphics(self.pipeline.clone())
+                .bind_descriptor_sets(
+                    PipelineBindPoint::Graphics,
+                    self.pipeline.layout().clone(),
+                    0,
+                    (desc_set, self.texture_desc_set.clone()),
+                )
+                .bind_vertex_buffers(0, (self.vertices.clone(), model.clone(), color.clone()))
+                .bind_index_buffer(self.indices.clone())
+                .draw_indexed(self.indices.len() as u32, model.len() as u32, 0, 0, 0)
+                .unwrap();
+        } else {
+            // TODO
+        }
     }
 
     fn create_model_instance_data(
@@ -246,8 +237,9 @@ impl TransViewer {
                 model: vecmath::col_mat4_mul(m, rotm),
             });
         }
-        CpuAccessibleBuffer::from_iter(device, BufferUsage::all(), false, data.iter().cloned())
-            .unwrap()
+        let buf = CpuAccessibleBuffer::from_iter(device, BufferUsage::all(), false, data)
+            .expect("failed to create buffer");
+        buf
     }
 
     fn create_color_instance_data(
@@ -316,24 +308,27 @@ impl TransViewer {
         let texture = Self::load_image(queue.clone());
         let sampler = Sampler::new(
             queue.device().clone(),
-            Filter::Linear,
-            Filter::Linear,
-            MipmapMode::Nearest,
-            SamplerAddressMode::Repeat,
-            SamplerAddressMode::Repeat,
-            SamplerAddressMode::Repeat,
-            0.0,
-            1.0,
-            0.0,
-            0.0,
+            SamplerCreateInfo {
+                mag_filter: Filter::Linear,
+                min_filter: Filter::Linear,
+                mipmap_mode: SamplerMipmapMode::Nearest,
+                address_mode: [SamplerAddressMode::Repeat; 3],
+                mip_lod_bias: 0.0,
+                ..Default::default()
+            },
         )
         .unwrap();
-        let layout = pipeline.layout().descriptor_set_layouts().get(1).unwrap();
-        let mut set_builder = PersistentDescriptorSet::start(layout.clone());
-        set_builder
-            .add_sampled_image(texture.clone(), sampler)
-            .unwrap();
-        set_builder.build().unwrap()
+        let layout = pipeline.layout().set_layouts().get(1).unwrap();
+
+        PersistentDescriptorSet::new(
+            layout.clone(),
+            [WriteDescriptorSet::image_view_sampler(
+                0,
+                texture.clone(),
+                sampler,
+            )],
+        )
+        .unwrap()
     }
 
     fn load_image(queue: Arc<Queue>) -> Arc<dyn ImageViewAbstract> {
@@ -360,7 +355,7 @@ impl TransViewer {
                 queue,
             )
             .unwrap();
-            (ImageView::new(image).unwrap(), future)
+            (ImageView::new_default(image).unwrap(), future)
         };
         texture
     }

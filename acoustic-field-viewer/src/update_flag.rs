@@ -4,14 +4,14 @@
  * Created Date: 26/11/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 26/11/2021
+ * Last Modified: 09/05/2022
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
  *
  */
 
-bitflags! {
+bitflags::bitflags! {
     pub struct UpdateFlag: u32 {
         const UPDATE_SOURCE_DRIVE = 1 << 1;
         const UPDATE_COLOR_MAP = 1 << 2;

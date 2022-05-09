@@ -3,7 +3,5 @@
 members = [
     "acoustic-field-viewer",
     "autd3-emulator",
-    "autd3-emulator-server",
-    "vecmath-util",
-    "firmware-emulator"
+    "vecmath-util"
 ]

@@ -4,7 +4,7 @@
  * Created Date: 26/11/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 03/12/2021
+ * Last Modified: 09/05/2022
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -14,12 +14,11 @@
 use std::f32::consts::PI;
 
 use crate::{Vector3, Vector4};
-use autd3_core::hardware_defined::TRANS_SPACING_MM;
+use autd3_core::TRANS_SPACING_MM;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct ViewerSettings {
-    pub frequency: f32,
     pub source_size: f32,
     pub wave_length: f32,
     pub axis_length: f32,
@@ -51,8 +50,7 @@ impl ViewerSettings {
 impl Default for ViewerSettings {
     fn default() -> Self {
         ViewerSettings {
-            frequency: autd3_core::hardware_defined::ULTRASOUND_FREQUENCY as _,
-            source_size: autd3_core::hardware_defined::TRANS_SPACING_MM as _,
+            source_size: autd3_core::TRANS_SPACING_MM as _,
             color_scale: 2.0,
             slice_alpha: 0.95,
             axis_length: 50.0,

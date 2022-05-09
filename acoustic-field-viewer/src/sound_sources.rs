@@ -4,16 +4,19 @@
  * Created Date: 29/11/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 03/12/2021
+ * Last Modified: 09/05/2022
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
  *
  */
 
+use bytemuck::{Pod, Zeroable};
+
 use crate::{Vector3, Vector4};
 
-#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]
 pub struct Drive {
     pub amp: f32,
     pub phase: f32,

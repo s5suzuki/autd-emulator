@@ -4,7 +4,7 @@
  * Created Date: 06/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 17/12/2021
+ * Last Modified: 09/05/2022
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -32,7 +32,7 @@ use autd3_core::{
     sequence::GainMode,
 };
 use autd3_emulator_server::{
-    AutdData, AutdServer, DelayOffset, Gain, GainSequence, Modulation, PointSequence,
+    AUTDServer, AutdData, DelayOffset, Gain, GainSequence, Modulation, PointSequence,
 };
 
 use imgui::*;
@@ -120,7 +120,7 @@ impl App {
         imgui: &mut Context,
         platform: &mut WinitPlatform,
         imgui_renderer: &mut imgui_vulkano_renderer::Renderer,
-        autd_server: &mut AutdServer,
+        autd_server: &mut AUTDServer,
         before_future: F,
     ) -> Box<dyn GpuFuture>
     where
@@ -271,7 +271,7 @@ impl App {
         self.view_projection = view_projection;
     }
 
-    fn handle_autd(&mut self, autd_server: &mut AutdServer) -> UpdateFlag {
+    fn handle_autd(&mut self, autd_server: &mut AUTDServer) -> UpdateFlag {
         let mut update_flag = UpdateFlag::empty();
         autd_server.update(|data| {
             for d in data {
@@ -1124,7 +1124,7 @@ pub fn main() {
 
     let (mut imgui, mut platform, mut imgui_renderer) = init_imgui(&renderer);
 
-    let mut autd_server = AutdServer::new(&format!("127.0.0.1:{}", app.setting.port)).unwrap();
+    let mut autd_server = AUTDServer::new(&format!("127.0.0.1:{}", app.setting.port)).unwrap();
 
     let mut is_running = true;
     while is_running {

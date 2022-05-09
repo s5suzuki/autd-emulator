@@ -4,7 +4,7 @@
  * Created Date: 11/11/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 03/12/2021
+ * Last Modified: 09/05/2022
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -23,9 +23,7 @@ use acoustic_field_viewer::{
     trans_viewer::TransViewer,
     Matrix4, UpdateFlag, Vector3, ViewerSettings,
 };
-use autd3_core::hardware_defined::{
-    is_missing_transducer, NUM_TRANS_X, NUM_TRANS_Y, TRANS_SPACING_MM,
-};
+use autd3_core::{is_missing_transducer, NUM_TRANS_X, NUM_TRANS_Y, TRANS_SPACING_MM};
 use imgui::{
     AngleSlider, Context, Drag, FontConfig, FontGlyphRanges, FontSource, Slider, TabBar, TabItem,
     Ui,
@@ -86,16 +84,21 @@ impl App {
             [0., 0., 1.],
         )];
 
+        let field_compute_pipeline = FieldComputePipeline::new(renderer.queue(), &viewer_settings);
+        let slice_viewer = SliceViewer::new(renderer, &viewer_settings);
+        let trans_viewer = TransViewer::new(renderer, &viewer_settings);
+        let dir_viewer = DirectionViewer::new(renderer, &viewer_settings);
+
         Self {
             is_running: true,
             sources,
             axes,
             focal_pos: FOCAL_POS,
             last_frame: Instant::now(),
-            field_compute_pipeline: FieldComputePipeline::new(renderer.queue(), &viewer_settings),
-            slice_viewer: SliceViewer::new(renderer, &viewer_settings),
-            trans_viewer: TransViewer::new(renderer, &viewer_settings),
-            dir_viewer: DirectionViewer::new(renderer, &viewer_settings),
+            field_compute_pipeline,
+            slice_viewer,
+            trans_viewer,
+            dir_viewer,
             viewer_settings,
             view_projection: renderer.get_view_projection(&viewer_settings),
             frame_count: 0,
@@ -460,7 +463,7 @@ impl App {
 
         self.dir_viewer.render(&mut builder);
         self.slice_viewer.render(&mut builder);
-        self.trans_viewer.render(&mut builder);
+        // self.trans_viewer.render(&mut builder); // FIXME
         builder.end_render_pass().unwrap();
         let command_buffer = builder.build().unwrap();
 
@@ -509,7 +512,7 @@ impl App {
             .draw_commands(
                 &mut cmd_buf_builder,
                 renderer.queue(),
-                ImageView::new(renderer.image()).unwrap(),
+                ImageView::new_default(renderer.image()).unwrap(),
                 draw_data,
             )
             .expect("Rendering failed");
