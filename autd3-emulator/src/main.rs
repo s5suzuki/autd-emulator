@@ -11,6 +11,8 @@
  *
  */
 
+mod interface;
+mod server;
 mod settings;
 
 use std::{collections::VecDeque, f32::consts::PI, path::Path, time::Instant};
@@ -23,20 +25,13 @@ use acoustic_field_viewer::{
     slice_viewer::SliceViewer,
     sound_sources::{Drive, SoundSources},
     trans_viewer::TransViewer,
-    Matrix4, UpdateFlag, Vector3,
-};
-use autd3_core::{
-    hardware_defined::{
-        CPUControlFlags, FPGAControlFlags, MOD_SAMPLING_FREQ_BASE, NUM_TRANS_IN_UNIT, SEQ_BASE_FREQ,
-    },
-    sequence::GainMode,
-};
-use autd3_emulator_server::{
-    AUTDServer, AutdData, DelayOffset, Gain, GainSequence, Modulation, PointSequence,
+    Matrix4, UpdateFlag,
 };
 
+use autd3_core::{Duty, Phase, FPGA_CLK_FREQ, NUM_TRANS_IN_UNIT};
 use imgui::*;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
+use server::{AUTDEvent, AUTDServer};
 use vulkano::{
     command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, SubpassContents},
     image::view::ImageView,
@@ -60,14 +55,7 @@ struct App {
     slice_viewer: SliceViewer,
     field_compute_pipeline: FieldComputePipeline,
     view_projection: (Matrix4, Matrix4),
-    fpga_flag: FPGAControlFlags,
-    cpu_flag: CPUControlFlags,
-    modulation: Option<Modulation>,
-    point_sequence: Option<PointSequence>,
-    gain_sequence: Option<GainSequence>,
-    seq_idx: i32,
-    seq_wavelength: f32,
-    delay_offset: Option<DelayOffset>,
+    stm_idx: i32,
     log_buf: VecDeque<String>,
     last_frame: Instant,
     last_frame_fps: Instant,
@@ -75,6 +63,17 @@ struct App {
     fps: f64,
     save_image: bool,
     recording: bool,
+    modulation: (Vec<u8>, u32),
+    drives: Vec<Vec<([Duty; NUM_TRANS_IN_UNIT], [Phase; NUM_TRANS_IN_UNIT])>>,
+    cycles: Vec<u16>,
+    is_legacy_mode: bool,
+    is_stm_mode: bool,
+    is_gain_stm_mode: bool,
+    is_force_fan: bool,
+    stm_freq_div: u32,
+    point_stm_sound_speed: u32,
+    silencer_cycle: u16,
+    silencer_step: u16,
 }
 
 impl App {
@@ -96,14 +95,7 @@ impl App {
             slice_viewer,
             field_compute_pipeline,
             view_projection,
-            fpga_flag: FPGAControlFlags::empty(),
-            cpu_flag: CPUControlFlags::empty(),
-            modulation: None,
-            point_sequence: None,
-            gain_sequence: None,
-            seq_idx: 0,
-            seq_wavelength: 8.5,
-            delay_offset: None,
+            stm_idx: 0,
             log_buf: VecDeque::new(),
             last_frame: std::time::Instant::now(),
             last_frame_fps: std::time::Instant::now(),
@@ -111,6 +103,17 @@ impl App {
             fps: 0.0,
             save_image: false,
             recording: false,
+            modulation: (vec![], 0),
+            drives: vec![],
+            cycles: vec![],
+            is_legacy_mode: true,
+            is_stm_mode: false,
+            is_gain_stm_mode: true,
+            is_force_fan: false,
+            stm_freq_div: 0,
+            point_stm_sound_speed: 0,
+            silencer_cycle: 0,
+            silencer_step: 0,
         }
     }
 
@@ -176,8 +179,7 @@ impl App {
             || update_flag.contains(UpdateFlag::UPDATE_SLICE_POS)
             || update_flag.contains(UpdateFlag::UPDATE_SLICE_SIZE)
             || update_flag.contains(UpdateFlag::UPDATE_SOURCE_DRIVE)
-            || update_flag.contains(UpdateFlag::UPDATE_SOURCE_FLAG)
-            || update_flag.contains(UpdateFlag::UPDATE_WAVENUM);
+            || update_flag.contains(UpdateFlag::UPDATE_SOURCE_FLAG);
 
         let filed_image = self.slice_viewer.field_image_view();
         let slice_future = if update_field {
@@ -213,7 +215,7 @@ impl App {
             .draw_commands(
                 &mut cmd_buf_builder,
                 renderer.queue(),
-                ImageView::new(renderer.image()).unwrap(),
+                ImageView::new_default(renderer.image()).unwrap(),
                 draw_data,
             )
             .expect("Rendering failed");
@@ -273,110 +275,121 @@ impl App {
 
     fn handle_autd(&mut self, autd_server: &mut AUTDServer) -> UpdateFlag {
         let mut update_flag = UpdateFlag::empty();
-        autd_server.update(|data| {
-            for d in data {
-                match d {
-                    AutdData::Geometries(geometries) => {
-                        self.sources.clear();
-                        self.axis.clear();
-                        self.dev_num = geometries.len();
-                        if self.setting.show.len() < self.dev_num {
-                            self.setting.show.resize(self.dev_num, true);
-                        }
-                        if self.setting.enable.len() < self.dev_num {
-                            self.setting.enable.resize(self.dev_num, true);
-                        }
-                        if self.setting.show_axis.len() < self.dev_num {
-                            self.setting.show_axis.resize(self.dev_num, false);
-                        }
-                        for (i, geometry) in geometries.iter().enumerate() {
-                            for (pos, dir) in geometry.make_autd_transducers() {
-                                let enable = if self.setting.enable[i] { 1.0 } else { 0.0 };
-                                let visible = if self.setting.show[i] { 1.0 } else { 0.0 };
-                                self.sources
-                                    .add(pos, dir, Drive::new(0.0, 0.0, enable, visible));
-                            }
-                            let mut axis = Axis3D::new(
-                                geometry.origin,
-                                geometry.right,
-                                geometry.up,
-                                vecmath::vec3_cross(geometry.right, geometry.up),
-                            );
-                            axis.show = self.setting.show_axis[i];
-                            self.axis.push(axis);
-                        }
-                        self.log("geometry");
-                        update_flag |= UpdateFlag::INIT_SOURCE;
-                        update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
-                        update_flag |= UpdateFlag::INIT_AXIS;
-                    }
-                    AutdData::Gain(gain) => {
-                        self.set_gain(&gain);
-                        self.log("gain");
-                        update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
-                    }
-                    AutdData::Clear => {
-                        for source in self.sources.drives_mut() {
-                            source.amp = 0.;
-                            source.phase = 0.;
-                        }
-                        self.modulation = None;
-                        self.point_sequence = None;
-                        self.gain_sequence = None;
-                        self.delay_offset = None;
-                        self.log("clear");
-                        update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
-                    }
-                    AutdData::Modulation(m) => {
-                        self.modulation = Some(m);
-                        self.log("receive modulation");
-                    }
-                    AutdData::CtrlFlag(fpga_flag, cpu_flag) => {
-                        self.fpga_flag = fpga_flag;
-                        self.cpu_flag = cpu_flag;
-                        for source in self.sources.drives_mut() {
-                            source.enable = if fpga_flag.contains(FPGAControlFlags::OUTPUT_ENABLE) {
-                                1.0
-                            } else {
-                                0.0
-                            };
-                        }
-                        update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
-                    }
-                    AutdData::RequestFpgaVerMsb => {
-                        self.log("req fpga ver msb");
-                    }
-                    AutdData::RequestFpgaVerLsb => {
-                        self.log("req fpga ver lsb");
-                    }
-                    AutdData::RequestCpuVerMsb => {
-                        self.log("req cpu ver lsb");
-                    }
-                    AutdData::RequestCpuVerLsb => {
-                        self.log("req cpu ver lsb");
-                    }
-                    AutdData::PointSequence(seq) => {
-                        let (focus, duty) = seq.seq_data[0];
-                        self.seq_wavelength = seq.wavelength as f32 / 1000.0;
-                        self.point_sequence = Some(seq);
-                        self.gain_sequence = None;
-                        self.seq_idx = 0;
-                        self.calc_focus(duty, focus);
-                        update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
-                    }
-                    AutdData::GainSequence(seq) => {
-                        self.point_sequence = None;
-                        self.set_gain(&seq.seq_data[0]);
-                        self.gain_sequence = Some(seq);
-                        self.seq_idx = 0;
-                        self.log("receive gain sequence");
-                        update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
-                    }
-                    AutdData::DelayOffset(d) => {
-                        self.delay_offset = Some(d);
-                        self.log("receive delay offset");
-                    }
+        autd_server.update(|event, emulator| match event {
+            AUTDEvent::Geometries(geometries) => {
+                self.sources.clear();
+                self.axis.clear();
+                self.dev_num = geometries.len();
+                if self.setting.show.len() < self.dev_num {
+                    self.setting.show.resize(self.dev_num, true);
                 }
+                if self.setting.enable.len() < self.dev_num {
+                    self.setting.enable.resize(self.dev_num, true);
+                }
+                if self.setting.show_axis.len() < self.dev_num {
+                    self.setting.show_axis.resize(self.dev_num, false);
+                }
+                for (i, geometry) in geometries.iter().enumerate() {
+                    let frequencies = emulator
+                        .fpga(i)
+                        .cycles()
+                        .map(|c| (FPGA_CLK_FREQ as f64 / c as f64) as f32);
+                    for (j, (pos, dir)) in geometry.make_autd_transducers().iter().enumerate() {
+                        let enable = if self.setting.enable[i] { 1.0 } else { 0.0 };
+                        let visible = if self.setting.show[i] { 1.0 } else { 0.0 };
+                        self.sources.add(
+                            *pos,
+                            *dir,
+                            Drive::new(
+                                0.0,
+                                0.0,
+                                enable,
+                                frequencies[j],
+                                self.setting.viewer_setting.sound_speed,
+                            ),
+                            visible,
+                        );
+                    }
+                    let mut axis = Axis3D::new(
+                        geometry.origin,
+                        geometry.right,
+                        geometry.up,
+                        vecmath::vec3_cross(geometry.right, geometry.up),
+                    );
+                    axis.show = self.setting.show_axis[i];
+                    self.axis.push(axis);
+                }
+                self.log("init geometry");
+                update_flag |= UpdateFlag::INIT_SOURCE;
+                update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
+                update_flag |= UpdateFlag::INIT_AXIS;
+            }
+            AUTDEvent::Clear => {
+                self.sources
+                    .drives_mut()
+                    .zip(
+                        emulator
+                            .cpus()
+                            .iter()
+                            .flat_map(|cpu| cpu.fpga().drives()[0].0),
+                    )
+                    .zip(
+                        emulator
+                            .cpus()
+                            .iter()
+                            .flat_map(|cpu| cpu.fpga().drives()[0].1),
+                    )
+                    .zip(emulator.cpus().iter().flat_map(|cpu| cpu.fpga().cycles()))
+                    .for_each(|(((drive, duty), phase), cycle)| {
+                        drive.amp = duty.duty as f32 / cycle as f32;
+                        drive.phase = 2.0 * PI * phase.phase as f32 / cycle as f32;
+                        drive.set_wave_number(
+                            FPGA_CLK_FREQ as f32 / cycle as f32,
+                            self.setting.viewer_setting.sound_speed,
+                        );
+                    });
+                self.modulation = emulator.fpga(0).modulation();
+                self.log("clear");
+                update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
+            }
+            AUTDEvent::RequestCpuVersion => {
+                self.log("req cpu ver");
+            }
+            AUTDEvent::RequestFpgaVersion => {
+                self.log("req fpga ver");
+            }
+            AUTDEvent::RequestFpgaFunctions => {
+                self.log("req fpga functions");
+            }
+            AUTDEvent::Normal => {
+                if emulator.cpus().len() == 0 {
+                    return;
+                }
+                self.drives = emulator
+                    .cpus()
+                    .iter()
+                    .map(|cpu| cpu.fpga().drives())
+                    .collect();
+                self.cycles = emulator
+                    .cpus()
+                    .iter()
+                    .flat_map(|cpu| cpu.fpga().cycles())
+                    .collect();
+                self.update_drive(0);
+
+                self.modulation = emulator.fpga(0).modulation();
+                self.is_legacy_mode = emulator.cpu(0).fpga().is_legacy_mode();
+                self.is_stm_mode = emulator.cpu(0).fpga().is_stm_mode();
+                self.is_gain_stm_mode = emulator.cpu(0).fpga().is_stm_gain_mode();
+                self.is_force_fan = emulator.cpu(0).fpga().is_force_fan();
+
+                self.stm_freq_div = emulator.cpu(0).fpga().stm_frequency_division();
+                self.silencer_cycle = emulator.cpu(0).fpga().silencer_cycle();
+                self.silencer_step = emulator.cpu(0).fpga().silencer_step();
+                self.point_stm_sound_speed = emulator.cpu(0).fpga().sound_speed();
+
+                self.log("update drive");
+                update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
             }
         });
         update_flag
@@ -675,12 +688,12 @@ impl App {
                     }
                 });
                 TabItem::new("Config").build(ui, || {
-                    if Drag::new("Wavelength")
+                    if Drag::new("Sound speed")
                         .speed(0.1)
                         .range(0.0, f32::INFINITY)
-                        .build(ui, &mut self.setting.viewer_setting.wave_length)
+                        .build(ui, &mut self.setting.viewer_setting.sound_speed)
                     {
-                        update_flag |= UpdateFlag::UPDATE_WAVENUM;
+                        update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
                     }
                     ui.separator();
                     if Slider::new("Transducer alpha", 0.0, 1.0)
@@ -694,13 +707,13 @@ impl App {
                         ui.text(format!("Device {}", i));
                         ui.same_line();
                         if ui.checkbox(&format!("show##{}", i), &mut self.setting.show[i]) {
-                            for trans in self
+                            for v in self
                                 .sources
-                                .drives_mut()
+                                .visibilities_mut()
                                 .skip(i * NUM_TRANS_IN_UNIT)
                                 .take(NUM_TRANS_IN_UNIT)
                             {
-                                trans.visible = if self.setting.show[i] { 1.0 } else { 0.0 };
+                                *v = if self.setting.show[i] { 1.0 } else { 0.0 };
                             }
                             update_flag |= UpdateFlag::UPDATE_SOURCE_FLAG;
                         }
@@ -745,168 +758,109 @@ impl App {
                 TabItem::new("Info").build(ui, || {
                     ui.text(format!("fps: {:.1}", self.fps));
 
-                    if let Some(m) = &self.modulation {
-                        ui.separator();
-                        ui.text("Modulation");
-                        ui.text(format!("Modulation size: {}", m.mod_data.len()));
-                        ui.text(format!("Modulation division: {}", m.mod_div));
-                        let smpl_period =
-                            (1000000.0 / MOD_SAMPLING_FREQ_BASE) as usize * m.mod_div as usize;
-                        ui.text(format!("Modulation sampling period: {} [us]", smpl_period));
-                        ui.text(format!(
-                            "Modulation period: {} [us]",
-                            smpl_period * m.mod_data.len()
-                        ));
-                        if !m.mod_data.is_empty() {
-                            ui.text(format!("mod[0]: {}", m.mod_data[0]));
-                        }
-                        if m.mod_data.len() == 2 || m.mod_data.len() == 3 {
-                            ui.text(format!("mod[1]: {}", m.mod_data[1]));
-                        } else if m.mod_data.len() > 3 {
-                            ui.text("...");
-                        }
-                        if m.mod_data.len() >= 3 {
-                            let idx = m.mod_data.len() - 1;
-                            ui.text(format!("mod[{}]: {}", idx, m.mod_data[idx]));
-                        }
+                    let m = &self.modulation;
+                    ui.separator();
+                    ui.text("Modulation");
+                    ui.text(format!("Size: {}", m.0.len()));
+                    ui.text(format!("Frequency division: {}", m.1));
+                    let sampling_freq = FPGA_CLK_FREQ as f64 / m.1 as f64;
+                    ui.text(format!("Sampling frequency: {} [Hz]", sampling_freq));
+                    let sampling_period = (1000000.0 * m.1 as f64 / FPGA_CLK_FREQ as f64) as usize;
+                    ui.text(format!(
+                        "Modulation sampling period: {} [us]",
+                        sampling_period
+                    ));
+                    ui.text(format!(
+                        "Modulation period: {} [us]",
+                        sampling_period * m.0.len()
+                    ));
+                    if !m.0.is_empty() {
+                        ui.text(format!("mod[0]: {}", m.0[0]));
+                    }
+                    if m.0.len() == 2 || m.0.len() == 3 {
+                        ui.text(format!("mod[1]: {}", m.0[1]));
+                    } else if m.0.len() > 3 {
+                        ui.text("...");
+                    }
+                    if m.0.len() >= 3 {
+                        let idx = m.0.len() - 1;
+                        ui.text(format!("mod[{}]: {}", idx, m.0[idx]));
+                    }
 
-                        if ui.radio_button_bool("show mod plot", self.setting.show_mod_plot) {
-                            self.setting.show_mod_plot = !self.setting.show_mod_plot;
-                        }
+                    if ui.radio_button_bool("show mod plot", self.setting.show_mod_plot) {
+                        self.setting.show_mod_plot = !self.setting.show_mod_plot;
+                    }
 
-                        if self.setting.show_mod_plot {
-                            let mod_v = self.mod_values(|&v| ((v as f32) / 512.0 * PI).sin());
-                            PlotLines::new(ui, "mod plot", &mod_v)
+                    if self.setting.show_mod_plot {
+                        let mod_v = self.mod_values(|&v| ((v as f32) / 512.0 * PI).sin());
+                        PlotLines::new(ui, "mod plot", &mod_v)
+                            .graph_size(self.setting.mod_plot_size)
+                            .build();
+                        if ui.radio_button_bool(
+                            "show mod plot (raw)",
+                            self.setting.show_mod_plot_raw,
+                        ) {
+                            self.setting.show_mod_plot_raw = !self.setting.show_mod_plot_raw;
+                        }
+                        if self.setting.show_mod_plot_raw {
+                            ui.separator();
+                            let mod_v = self.mod_values(|&v| v as f32);
+                            PlotLines::new(ui, "mod plot (raw)", &mod_v)
                                 .graph_size(self.setting.mod_plot_size)
                                 .build();
-                            if ui.radio_button_bool(
-                                "show mod plot (raw)",
-                                self.setting.show_mod_plot_raw,
-                            ) {
-                                self.setting.show_mod_plot_raw = !self.setting.show_mod_plot_raw;
-                            }
-                            if self.setting.show_mod_plot_raw {
-                                ui.separator();
-                                let mod_v = self.mod_values(|&v| v as f32);
-                                PlotLines::new(ui, "mod plot (raw)", &mod_v)
-                                    .graph_size(self.setting.mod_plot_size)
-                                    .build();
-                            }
-
-                            Drag::new("plot size")
-                                .range(0.0, f32::INFINITY)
-                                .build_array(ui, &mut self.setting.mod_plot_size);
                         }
+
+                        Drag::new("plot size")
+                            .range(0.0, f32::INFINITY)
+                            .build_array(ui, &mut self.setting.mod_plot_size);
                     }
 
-                    if self.fpga_flag.contains(FPGAControlFlags::SEQ_MODE) {
+                    if self.is_stm_mode {
                         ui.separator();
-                        if let Some(seq) = &self.point_sequence {
-                            ui.text("PointSequence mode");
-                            ui.text(format!("Sequence size: {}", seq.seq_data.len()));
-                            ui.text(format!("Sequence division: {}", seq.seq_div));
-                            let smpl_period = (1000000 / SEQ_BASE_FREQ) * seq.seq_div as usize;
-                            ui.text(format!("Sequence sampling period: {} [us]", smpl_period));
-                            ui.text(format!(
-                                "Sequence period: {} [us]",
-                                smpl_period * seq.seq_data.len()
-                            ));
-                            if ui.input_int("Sequence idx", &mut self.seq_idx).build() {
-                                if self.seq_idx >= seq.seq_data.len() as _ {
-                                    self.seq_idx = 0;
-                                }
-                                if self.seq_idx < 0 {
-                                    self.seq_idx = seq.seq_data.len() as i32 - 1;
-                                }
-                                let (focus, duty) = seq.seq_data[self.seq_idx as usize];
-                                self.calc_focus(duty, focus);
-                                update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
-                            }
-                            ui.text(format!(
-                                "time: {} [us]",
-                                smpl_period * self.seq_idx as usize
-                            ));
+                        if self.is_gain_stm_mode {
+                            ui.text("GainSTM mode");
+                        } else {
+                            ui.text("PointSTM mode");
                         }
-                        if let Some(seq) = self.gain_sequence.take() {
-                            ui.text("GainSequence mode");
-                            ui.text(format!(
-                                "Gain mode: {}",
-                                match seq.gain_mode {
-                                    GainMode::DutyPhaseFull => "DutyPhaseFull",
-                                    GainMode::PhaseFull => "PhaseFull",
-                                    GainMode::PhaseHalf => "PhaseHalf",
-                                }
-                            ));
-                            ui.text(format!("Sequence size: {}", seq.seq_data.len()));
-                            ui.text(format!("Sequence division: {}", seq.seq_div));
-                            let smpl_period = (1000000 / SEQ_BASE_FREQ) * seq.seq_div as usize;
-                            ui.text(format!("Sequence sampling period: {} [us]", smpl_period));
-                            ui.text(format!(
-                                "Sequence period: {} [us]",
-                                smpl_period * seq.seq_data.len()
-                            ));
-                            if ui.input_int("Sequence idx", &mut self.seq_idx).build() {
-                                if self.seq_idx >= seq.seq_data.len() as _ {
-                                    self.seq_idx = 0;
-                                }
-                                if self.seq_idx < 0 {
-                                    self.seq_idx = seq.seq_data.len() as i32 - 1;
-                                }
-                                let idx = self.seq_idx as usize;
-                                self.set_gain(&seq.seq_data[idx as usize]);
-                                update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
-                            }
-                            ui.text(format!(
-                                "time: {} [us]",
-                                smpl_period * self.seq_idx as usize
-                            ));
-                            self.gain_sequence = Some(seq);
-                        }
-                    }
-
-                    if let Some(d) = &self.delay_offset {
-                        ui.separator();
-                        ui.text("Duty offset and Delay");
+                        ui.text(format!("Size: {}", self.drives.len()));
+                        ui.text(format!("Frequency division: {}", self.stm_freq_div));
+                        let sampling_freq = FPGA_CLK_FREQ as f64 / self.stm_freq_div as f64;
+                        ui.text(format!("Sampling frequency: {} [Hz]", sampling_freq));
+                        let sampling_period = (1000000 as usize * self.stm_freq_div as usize)
+                            as f64
+                            / FPGA_CLK_FREQ as f64;
+                        ui.text(format!("Sampling period: {} [us]", sampling_period));
                         ui.text(format!(
-                            "offset[0]: {}, delay[0]: {}",
-                            d.delay_offset[0].1, d.delay_offset[0].0
+                            "Period: {} [us]",
+                            sampling_period * self.drives.len() as f64
                         ));
-                        ui.text("...");
-                        let idx = d.delay_offset.len() - 1;
+                        if ui.input_int("Index", &mut self.stm_idx).build() {
+                            if self.stm_idx >= self.drives.len() as _ {
+                                self.stm_idx = 0;
+                            }
+                            if self.stm_idx < 0 {
+                                self.stm_idx = self.drives.len() as i32 - 1;
+                            }
+                            self.update_drive(self.stm_idx as usize);
+
+                            update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
+                        }
                         ui.text(format!(
-                            "offset[{0}]: {1}, delay[{0}]: {2}",
-                            idx, d.delay_offset[idx].1, d.delay_offset[idx].0
+                            "time: {} [us]",
+                            sampling_period * self.stm_idx as f64
                         ));
                     }
 
                     ui.separator();
                     ui.text("FPGA flag");
-                    let mut flag = self.fpga_flag;
-                    ui.checkbox_flags("OUTPUT ENABLE", &mut flag, FPGAControlFlags::OUTPUT_ENABLE);
-                    ui.checkbox_flags(
-                        "OUTPUT BALANCE",
-                        &mut flag,
-                        FPGAControlFlags::OUTPUT_BALANCE,
-                    );
-                    ui.checkbox_flags("SILENT", &mut flag, FPGAControlFlags::SILENT);
-                    ui.checkbox_flags("FORCE FAN", &mut flag, FPGAControlFlags::FORCE_FAN);
-                    ui.checkbox_flags("SEQ MODE", &mut flag, FPGAControlFlags::SEQ_MODE);
-                    ui.checkbox_flags("SEQ GAIN MODE", &mut flag, FPGAControlFlags::SEQ_GAIN_MODE);
-
-                    ui.separator();
-                    ui.text("CPU flag");
-                    let mut flag = self.cpu_flag;
-                    ui.checkbox_flags("MOD BEGIN", &mut flag, CPUControlFlags::MOD_BEGIN);
-                    ui.checkbox_flags("MOD END", &mut flag, CPUControlFlags::MOD_END);
-                    ui.checkbox_flags("SEQ BEGIN", &mut flag, CPUControlFlags::SEQ_BEGIN);
-                    ui.checkbox_flags("SEQ END", &mut flag, CPUControlFlags::SEQ_END);
-                    ui.checkbox_flags(
-                        "READS FPGA INFO",
-                        &mut flag,
-                        CPUControlFlags::READS_FPGA_INFO,
-                    );
-                    ui.checkbox_flags("WRITE BODY", &mut flag, CPUControlFlags::WRITE_BODY);
-                    ui.checkbox_flags("WAIT ON SYNC", &mut flag, CPUControlFlags::WAIT_ON_SYNC);
+                    let mut value = self.is_legacy_mode;
+                    ui.checkbox("LEGACY MODE", &mut value);
+                    let mut value = self.is_force_fan;
+                    ui.checkbox("FORCE FAN", &mut value);
+                    let mut value = self.is_stm_mode;
+                    ui.checkbox("SEQ MODE", &mut value);
+                    let mut value = self.is_gain_stm_mode;
+                    ui.checkbox("SEQ GAIN MODE", &mut value);
                 });
                 TabItem::new("Log").build(ui, || {
                     if ui.radio_button_bool("enable", self.setting.log_enable) {
@@ -996,7 +950,6 @@ impl App {
             ui.same_line();
             if ui.small_button("default") {
                 let viewer_setting = acoustic_field_viewer::ViewerSettings {
-                    wave_length: self.setting.viewer_setting.wave_length,
                     vsync: self.setting.viewer_setting.vsync,
                     ..Default::default()
                 };
@@ -1028,32 +981,7 @@ impl App {
     where
         F: Fn(&u8) -> f32,
     {
-        if let Some(m) = &self.modulation {
-            m.mod_data.iter().map(f).collect()
-        } else {
-            vec![]
-        }
-    }
-
-    fn set_gain(&mut self, gain: &Gain) {
-        for ((&phase, &amp), source) in gain
-            .phases
-            .iter()
-            .zip(gain.amps.iter())
-            .zip(self.sources.drives_mut())
-        {
-            source.amp = (amp as f32 / 510.0 * std::f32::consts::PI).sin();
-            source.phase = 2.0 * PI * (1.0 - (phase as f32 / 255.0));
-        }
-    }
-
-    fn calc_focus(&mut self, duty: u8, focus: Vector3) {
-        for (pos, source) in self.sources.positions_drives_mut() {
-            source.amp = (duty as f32 / 510.0 * std::f32::consts::PI).sin();
-            let dist = vecmath_util::dist(vecmath_util::to_vec3(pos), focus);
-            let phase = (dist / self.seq_wavelength) % 1.0;
-            source.phase = 2.0 * PI * (1.0 - phase);
-        }
+        self.modulation.0.iter().map(f).collect()
     }
 
     // TODO: This log system is not so efficient
@@ -1075,6 +1003,22 @@ impl App {
             log.push('\n');
         }
         log
+    }
+
+    fn update_drive(&mut self, idx: usize) {
+        self.sources
+            .drives_mut()
+            .zip(self.drives.iter().flat_map(|d| d[idx].0))
+            .zip(self.drives.iter().flat_map(|d| d[idx].1))
+            .zip(self.cycles.iter())
+            .for_each(|(((drive, duty), phase), cycle)| {
+                drive.amp = duty.duty as f32 * 2.0 / *cycle as f32;
+                drive.phase = 2.0 * PI * (*cycle - phase.phase) as f32 / *cycle as f32;
+                drive.set_wave_number(
+                    FPGA_CLK_FREQ as f32 / *cycle as f32,
+                    self.setting.viewer_setting.sound_speed,
+                );
+            });
     }
 }
 
@@ -1120,6 +1064,8 @@ pub fn main() {
     );
 
     let mut app = App::new(setting, &renderer);
+    dbg!("c");
+
     app.reset(&mut renderer);
 
     let (mut imgui, mut platform, mut imgui_renderer) = init_imgui(&renderer);
@@ -1168,8 +1114,9 @@ pub fn main() {
                 let image = app.slice_viewer.field_image_view();
                 let result = image.read().unwrap();
 
-                use image::png::PngEncoder;
+                use image::codecs::png::PngEncoder;
                 use image::ColorType;
+                use image::ImageEncoder;
                 use std::fs::File;
 
                 let width = app.setting.viewer_setting.slice_width
@@ -1188,7 +1135,7 @@ pub fn main() {
                     let output = File::create(&app.setting.save_file_path).unwrap();
                     let encoder = PngEncoder::new(output);
                     encoder
-                        .encode(&pixels, width, height, ColorType::Rgba8)
+                        .write_image(&pixels, width, height, ColorType::Rgba8)
                         .unwrap();
                 }
 
@@ -1200,12 +1147,14 @@ pub fn main() {
                     let output = File::create(path).unwrap();
                     let encoder = PngEncoder::new(output);
                     encoder
-                        .encode(&pixels, width, height, ColorType::Rgba8)
+                        .write_image(&pixels, width, height, ColorType::Rgba8)
                         .unwrap();
                 }
             }
         });
     }
+
+    autd_server.close();
 
     app.setting.merge_render_sys(&renderer);
     app.setting.save("setting.json");

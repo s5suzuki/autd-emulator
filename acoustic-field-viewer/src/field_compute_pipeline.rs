@@ -11,7 +11,7 @@
  *
  */
 
-use std::{f32::consts::PI, sync::Arc};
+use std::sync::Arc;
 
 use bytemuck::{Pod, Zeroable};
 use scarlet::{colormap::ColorMap, prelude::*};
@@ -36,7 +36,7 @@ use crate::{
 #[derive(Default, Debug, Copy, Clone, Zeroable, Pod)]
 struct Config {
     source_num: u32,
-    wave_num: f32,
+    _wave_num: f32,
     color_scale: f32,
     width: u32,
     height: u32,
@@ -139,14 +139,16 @@ impl FieldComputePipeline {
         update_flag: UpdateFlag,
         settings: &ViewerSettings,
     ) {
-        if update_flag.contains(UpdateFlag::INIT_SOURCE) {
-            self.init_source_pos(sources);
-        }
+        if !sources.is_empty() {
+            if update_flag.contains(UpdateFlag::INIT_SOURCE) {
+                self.init_source_pos(sources);
+            }
 
-        if update_flag.contains(UpdateFlag::UPDATE_SOURCE_DRIVE)
-            || update_flag.contains(UpdateFlag::UPDATE_SOURCE_FLAG)
-        {
-            self.init_source_drive(sources);
+            if update_flag.contains(UpdateFlag::UPDATE_SOURCE_DRIVE)
+                || update_flag.contains(UpdateFlag::UPDATE_SOURCE_FLAG)
+            {
+                self.init_source_drive(sources);
+            }
         }
 
         if update_flag.contains(UpdateFlag::UPDATE_COLOR_MAP) {
@@ -183,7 +185,7 @@ impl FieldComputePipeline {
             let source_num = sources.len() as u32;
             let config = Config {
                 source_num,
-                wave_num: 2.0 * PI / settings.wave_length,
+                _wave_num: 0.0,
                 color_scale: settings.color_scale,
                 width: settings.slice_width / settings.slice_pixel_size,
                 height: settings.slice_height / settings.slice_pixel_size,

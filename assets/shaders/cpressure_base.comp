@@ -4,7 +4,7 @@
  * Created Date: 10/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 03/12/2021
+ * Last Modified: 09/05/2022
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -18,7 +18,7 @@ layout(set = 0, binding = 0) buffer Data {
 } data;
 layout(set = 1, binding = 0) uniform Config {
     uint source_num;
-    float wave_num;
+    float _wave_num;
     float color_scale;
     uint width;
     uint height;
@@ -55,7 +55,7 @@ void main() { \
         if(idx >= config.source_num) break; \
         vec3 tp = vec3(source_pos.pos[idx]); \
         float r = length(point - tp); \
-        float p = -source_drive.drive[idx].y - config.wave_num * r; \
+        float p = -source_drive.drive[idx].y - source_drive.drive[idx].w * r; \
         float amp = source_drive.drive[idx].z * source_drive.drive[idx].x / r; \
         re += amp * cos(p); \
         im += amp * sin(p); \

@@ -15,7 +15,6 @@ bitflags::bitflags! {
     pub struct UpdateFlag: u32 {
         const UPDATE_SOURCE_DRIVE = 1 << 1;
         const UPDATE_COLOR_MAP = 1 << 2;
-        const UPDATE_WAVENUM = 1 << 3;
         const UPDATE_CAMERA_POS = 1 << 4;
         const UPDATE_SLICE_POS = 1 << 5;
         const UPDATE_SLICE_SIZE = 1 << 6;

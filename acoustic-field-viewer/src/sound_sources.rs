@@ -11,6 +11,8 @@
  *
  */
 
+use std::f32::consts::PI;
+
 use bytemuck::{Pod, Zeroable};
 
 use crate::{Vector3, Vector4};
@@ -21,17 +23,25 @@ pub struct Drive {
     pub amp: f32,
     pub phase: f32,
     pub enable: f32,
-    pub visible: f32,
+    pub wave_num: f32,
 }
 
 impl Drive {
-    pub fn new(amp: f32, phase: f32, enable: f32, visible: f32) -> Self {
+    pub fn new(amp: f32, phase: f32, enable: f32, frequency: f32, sound_speed: f32) -> Self {
         Self {
             amp,
             phase,
             enable,
-            visible,
+            wave_num: Self::to_wave_number(frequency, sound_speed),
         }
+    }
+
+    pub fn set_wave_number(&mut self, frequency: f32, sound_speed: f32) {
+        self.wave_num = Self::to_wave_number(frequency, sound_speed);
+    }
+
+    fn to_wave_number(frequency: f32, sound_speed: f32) -> f32 {
+        2.0 * PI * frequency / sound_speed
     }
 }
 
@@ -39,6 +49,7 @@ pub struct SoundSources {
     pos: Vec<Vector4>,
     dir: Vec<Vector3>,
     drive: Vec<Drive>,
+    visibilities: Vec<f32>,
 }
 
 impl SoundSources {
@@ -47,13 +58,15 @@ impl SoundSources {
             pos: vec![],
             dir: vec![],
             drive: vec![],
+            visibilities: vec![],
         }
     }
 
-    pub fn add(&mut self, pos: Vector3, dir: Vector3, drive: Drive) {
+    pub fn add(&mut self, pos: Vector3, dir: Vector3, drive: Drive, visibility: f32) {
         self.pos.push(vecmath_util::to_vec4(pos));
         self.dir.push(dir);
         self.drive.push(drive);
+        self.visibilities.push(visibility);
     }
 
     pub fn clear(&mut self) {
@@ -84,6 +97,14 @@ impl SoundSources {
 
     pub fn drives_mut(&mut self) -> impl ExactSizeIterator<Item = &mut Drive> {
         self.drive.iter_mut()
+    }
+
+    pub fn visibilities(&self) -> impl ExactSizeIterator<Item = &f32> {
+        self.visibilities.iter()
+    }
+
+    pub fn visibilities_mut(&mut self) -> impl ExactSizeIterator<Item = &mut f32> {
+        self.visibilities.iter_mut()
     }
 
     pub fn positions_drives_mut(

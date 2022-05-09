@@ -20,7 +20,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct ViewerSettings {
     pub source_size: f32,
-    pub wave_length: f32,
+    pub frequency: f32,
+    pub sound_speed: f32,
     pub axis_length: f32,
     pub axis_width: f32,
     pub color_scale: f32,
@@ -55,7 +56,8 @@ impl Default for ViewerSettings {
             slice_alpha: 0.95,
             axis_length: 50.0,
             axis_width: 2.0,
-            wave_length: 8.5,
+            frequency: 40e3,
+            sound_speed: 340e3,
             slice_width: 400,
             slice_height: 300,
             slice_pixel_size: 1,

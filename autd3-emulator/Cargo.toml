@@ -9,6 +9,7 @@ edition = "2021"
 [dependencies]
 acoustic-field-viewer = {path="../acoustic-field-viewer"}
 autd3-core = "2.0.0"
+autd3-firmware-emulator = "2.0.0"
 camera_controllers = "0.32.0"
 chrono = "0.4.19"
 image = "0.24.2"

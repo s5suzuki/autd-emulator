@@ -95,6 +95,7 @@ version = "0.7.0"
 dependencies = [
  "acoustic-field-viewer",
  "autd3-core",
+ "autd3-firmware-emulator",
  "camera_controllers",
  "chrono",
  "image",
@@ -133,6 +134,16 @@ dependencies = [
  "anyhow",
  "bitflags",
  "thiserror",
+]
+
+[[package]]
+name = "autd3-firmware-emulator"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c588dac4359501de0ae67920e8ee88e6efe53afdf554b34492763f9ea7f64664"
+dependencies = [
+ "autd3-driver",
+ "num-integer",
 ]
 
 [[package]]

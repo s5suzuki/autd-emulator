@@ -148,15 +148,17 @@ impl DirectionViewer {
         axis: &[Axis3D],
         update_flag: UpdateFlag,
     ) {
-        if update_flag.contains(UpdateFlag::INIT_AXIS)
-            || update_flag.contains(UpdateFlag::UPDATE_AXIS_SIZE)
-            || update_flag.contains(UpdateFlag::UPDATE_AXIS_FLAG)
-        {
-            self.instance_data = Some(Self::create_instance_data(
-                renderer.device(),
-                settings,
-                axis,
-            ));
+        if !axis.is_empty() {
+            if update_flag.contains(UpdateFlag::INIT_AXIS)
+                || update_flag.contains(UpdateFlag::UPDATE_AXIS_SIZE)
+                || update_flag.contains(UpdateFlag::UPDATE_AXIS_FLAG)
+            {
+                self.instance_data = Some(Self::create_instance_data(
+                    renderer.device(),
+                    settings,
+                    axis,
+                ));
+            }
         }
 
         if update_flag.contains(UpdateFlag::UPDATE_CAMERA_POS) {

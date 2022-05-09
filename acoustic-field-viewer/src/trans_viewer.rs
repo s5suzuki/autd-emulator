@@ -153,34 +153,36 @@ impl TransViewer {
         sources: &SoundSources,
         update_flag: UpdateFlag,
     ) {
-        if update_flag.contains(UpdateFlag::INIT_SOURCE) {
-            self.model_instance_data = Some(Self::create_model_instance_data(
-                renderer.device(),
-                settings,
-                sources,
-            ));
-            self.color_instance_data = Some(Self::create_color_instance_data(
-                renderer.device(),
-                settings,
-                sources,
-                self.coloring_method,
-            ));
-        }
-
         if update_flag.contains(UpdateFlag::UPDATE_CAMERA_POS) {
             self.view_projection = *view_projection;
         }
 
-        if update_flag.contains(UpdateFlag::UPDATE_SOURCE_DRIVE)
-            || update_flag.contains(UpdateFlag::UPDATE_SOURCE_ALPHA)
-            || update_flag.contains(UpdateFlag::UPDATE_SOURCE_FLAG)
-        {
-            self.color_instance_data = Some(Self::create_color_instance_data(
-                renderer.device(),
-                settings,
-                sources,
-                self.coloring_method,
-            ));
+        if !sources.is_empty() {
+            if update_flag.contains(UpdateFlag::INIT_SOURCE) {
+                self.model_instance_data = Some(Self::create_model_instance_data(
+                    renderer.device(),
+                    settings,
+                    sources,
+                ));
+                self.color_instance_data = Some(Self::create_color_instance_data(
+                    renderer.device(),
+                    settings,
+                    sources,
+                    self.coloring_method,
+                ));
+            }
+
+            if update_flag.contains(UpdateFlag::UPDATE_SOURCE_DRIVE)
+                || update_flag.contains(UpdateFlag::UPDATE_SOURCE_ALPHA)
+                || update_flag.contains(UpdateFlag::UPDATE_SOURCE_FLAG)
+            {
+                self.color_instance_data = Some(Self::create_color_instance_data(
+                    renderer.device(),
+                    settings,
+                    sources,
+                    self.coloring_method,
+                ));
+            }
         }
     }
 
@@ -248,11 +250,11 @@ impl TransViewer {
         coloring_method: ColoringMethod,
     ) -> Arc<CpuAccessibleBuffer<[ColorInstanceData]>> {
         let mut data = Vec::new();
-        for drive in sources.drives() {
+        for (drive, v) in sources.drives().zip(sources.visibilities()) {
             let color = coloring_method(
                 drive.phase / (2.0 * PI),
                 drive.amp,
-                drive.visible * settings.source_alpha,
+                v * settings.source_alpha,
             );
             data.push(ColorInstanceData { color });
         }
