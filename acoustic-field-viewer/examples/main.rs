@@ -4,7 +4,7 @@
  * Created Date: 11/11/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 09/05/2022
+ * Last Modified: 10/05/2022
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -628,7 +628,7 @@ fn main() {
             Event::RedrawRequested(_) => {
                 let before_pipeline_future = match renderer.start_frame() {
                     Err(e) => {
-                        eprintln!("{}", e.to_string());
+                        eprintln!("{}", e);
                         return;
                     }
                     Ok(future) => future,

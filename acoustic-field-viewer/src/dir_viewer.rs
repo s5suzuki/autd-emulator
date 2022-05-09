@@ -4,7 +4,7 @@
  * Created Date: 01/12/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 09/05/2022
+ * Last Modified: 10/05/2022
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -148,17 +148,16 @@ impl DirectionViewer {
         axis: &[Axis3D],
         update_flag: UpdateFlag,
     ) {
-        if !axis.is_empty() {
-            if update_flag.contains(UpdateFlag::INIT_AXIS)
+        if !axis.is_empty()
+            && (update_flag.contains(UpdateFlag::INIT_AXIS)
                 || update_flag.contains(UpdateFlag::UPDATE_AXIS_SIZE)
-                || update_flag.contains(UpdateFlag::UPDATE_AXIS_FLAG)
-            {
-                self.instance_data = Some(Self::create_instance_data(
-                    renderer.device(),
-                    settings,
-                    axis,
-                ));
-            }
+                || update_flag.contains(UpdateFlag::UPDATE_AXIS_FLAG))
+        {
+            self.instance_data = Some(Self::create_instance_data(
+                renderer.device(),
+                settings,
+                axis,
+            ));
         }
 
         if update_flag.contains(UpdateFlag::UPDATE_CAMERA_POS) {

@@ -4,7 +4,7 @@
  * Created Date: 09/05/2022
  * Author: Shun Suzuki
  * -----
- * Last Modified: 09/05/2022
+ * Last Modified: 10/05/2022
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2022 Hapis Lab. All rights reserved.
@@ -15,9 +15,9 @@ use std::sync::mpsc::{self, Receiver};
 
 use acoustic_field_viewer::Vector3;
 use autd3_core::{
-    Body, GlobalHeader, TxDatagram, MSG_CLEAR, MSG_EMU_GEOMETRY_SET, MSG_RD_CPU_VERSION,
-    MSG_RD_FPGA_FUNCTION, MSG_RD_FPGA_VERSION, NUM_TRANS_IN_UNIT, NUM_TRANS_X, NUM_TRANS_Y,
-    TRANS_SPACING_MM,
+    Body, CPUControlFlags, GlobalHeader, TxDatagram, MSG_CLEAR, MSG_EMU_GEOMETRY_SET,
+    MSG_RD_CPU_VERSION, MSG_RD_FPGA_FUNCTION, MSG_RD_FPGA_VERSION, NUM_TRANS_IN_UNIT, NUM_TRANS_X,
+    NUM_TRANS_Y, TRANS_SPACING_MM,
 };
 use autd3_firmware_emulator::Emulator;
 
@@ -55,7 +55,7 @@ pub enum AUTDEvent {
     RequestFpgaVersion,
     RequestFpgaFunctions,
     RequestCpuVersion,
-    Normal,
+    Normal(CPUControlFlags),
     Geometries(Vec<Geometry>),
 }
 
@@ -130,7 +130,7 @@ impl AUTDServer {
                         _ => {
                             let num_bodies = (raw_buf.len() - std::mem::size_of::<GlobalHeader>())
                                 / std::mem::size_of::<Body>();
-                            let src = raw_buf.as_ptr().add(std::mem::size_of::<GlobalHeader>());
+                            let mut src = raw_buf.as_ptr().add(std::mem::size_of::<GlobalHeader>());
                             self.tx_buf
                                 .body_mut()
                                 .iter_mut()
@@ -139,11 +139,12 @@ impl AUTDServer {
                                     b.data.clone_from_slice(std::slice::from_raw_parts(
                                         src as *const u16,
                                         NUM_TRANS_IN_UNIT,
-                                    ))
+                                    ));
+                                    src = src.add(std::mem::size_of::<Body>());
                                 });
                             self.tx_buf.num_bodies = num_bodies;
                             self.emulator.send(&self.tx_buf);
-                            AUTDEvent::Normal
+                            AUTDEvent::Normal(self.tx_buf.header().cpu_flag)
                         }
                     };
 

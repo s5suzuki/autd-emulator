@@ -4,7 +4,7 @@
  * Created Date: 11/11/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 09/05/2022
+ * Last Modified: 10/05/2022
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -142,7 +142,7 @@ impl Renderer {
             .build_vk_surface(event_loop, instance.clone())
             .unwrap();
 
-        let (device, queue) = Self::create_device(instance.clone(), surface.clone());
+        let (device, queue) = Self::create_device(instance, surface.clone());
 
         let mut viewport = Viewport {
             origin: [0.0, 0.0],

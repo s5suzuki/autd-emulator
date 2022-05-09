@@ -4,7 +4,7 @@
  * Created Date: 06/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 09/05/2022
+ * Last Modified: 10/05/2022
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -28,7 +28,7 @@ use acoustic_field_viewer::{
     Matrix4, UpdateFlag,
 };
 
-use autd3_core::{Duty, Phase, FPGA_CLK_FREQ, NUM_TRANS_IN_UNIT};
+use autd3_core::{CPUControlFlags, Duty, Phase, FPGA_CLK_FREQ, NUM_TRANS_IN_UNIT};
 use imgui::*;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use server::{AUTDEvent, AUTDServer};
@@ -74,6 +74,7 @@ struct App {
     point_stm_sound_speed: u32,
     silencer_cycle: u16,
     silencer_step: u16,
+    static_mod: f32,
 }
 
 impl App {
@@ -114,6 +115,7 @@ impl App {
             point_stm_sound_speed: 0,
             silencer_cycle: 0,
             silencer_step: 0,
+            static_mod: 0.0,
         }
     }
 
@@ -361,23 +363,25 @@ impl App {
             AUTDEvent::RequestFpgaFunctions => {
                 self.log("req fpga functions");
             }
-            AUTDEvent::Normal => {
-                if emulator.cpus().len() == 0 {
+            AUTDEvent::Normal(flag) => {
+                if emulator.cpus().is_empty() {
                     return;
                 }
-                self.drives = emulator
-                    .cpus()
-                    .iter()
-                    .map(|cpu| cpu.fpga().drives())
-                    .collect();
-                self.cycles = emulator
-                    .cpus()
-                    .iter()
-                    .flat_map(|cpu| cpu.fpga().cycles())
-                    .collect();
-                self.update_drive(0);
 
-                self.modulation = emulator.fpga(0).modulation();
+                if flag.contains(CPUControlFlags::MOD_END) {
+                    self.modulation = emulator.fpga(0).modulation();
+                    if !self.modulation.0.is_empty() {
+                        let v = self.modulation.0[0];
+                        if self.modulation.0.iter().all(|&m| m == v) {
+                            self.static_mod = v as f32 / 255.0;
+                        } else {
+                            self.static_mod = 1.0;
+                        }
+                    } else {
+                        self.static_mod = 1.0;
+                    }
+                }
+
                 self.is_legacy_mode = emulator.cpu(0).fpga().is_legacy_mode();
                 self.is_stm_mode = emulator.cpu(0).fpga().is_stm_mode();
                 self.is_gain_stm_mode = emulator.cpu(0).fpga().is_stm_gain_mode();
@@ -387,6 +391,32 @@ impl App {
                 self.silencer_cycle = emulator.cpu(0).fpga().silencer_cycle();
                 self.silencer_step = emulator.cpu(0).fpga().silencer_step();
                 self.point_stm_sound_speed = emulator.cpu(0).fpga().sound_speed();
+
+                if flag.contains(CPUControlFlags::DO_SYNC) {
+                    self.cycles = emulator
+                        .cpus()
+                        .iter()
+                        .flat_map(|cpu| cpu.fpga().cycles())
+                        .collect();
+                }
+
+                if self.is_stm_mode {
+                    if flag.contains(CPUControlFlags::STM_END) {
+                        self.drives = emulator
+                            .cpus()
+                            .iter()
+                            .map(|cpu| cpu.fpga().drives())
+                            .collect();
+                    }
+                    self.update_drive(0);
+                } else {
+                    self.drives = emulator
+                        .cpus()
+                        .iter()
+                        .map(|cpu| cpu.fpga().drives())
+                        .collect();
+                    self.update_drive(0);
+                }
 
                 self.log("update drive");
                 update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
@@ -758,6 +788,13 @@ impl App {
                 TabItem::new("Info").build(ui, || {
                     ui.text(format!("fps: {:.1}", self.fps));
 
+                    ui.separator();
+                    ui.text("Silencer");
+                    ui.text(format!("Cycle: {}", self.silencer_cycle));
+                    let freq = FPGA_CLK_FREQ as f64 / self.silencer_cycle as f64;
+                    ui.text(format!("Sampling Frequency: {} [Hz]", freq));
+                    ui.text(format!("Step: {}", self.silencer_step));
+
                     let m = &self.modulation;
                     ui.separator();
                     ui.text("Modulation");
@@ -821,25 +858,28 @@ impl App {
                             ui.text("GainSTM mode");
                         } else {
                             ui.text("PointSTM mode");
+                            ui.text(format!(
+                                "Sound speed: {} [mm/s]",
+                                (self.point_stm_sound_speed * 1000) as f32 / 1024.0
+                            ));
                         }
-                        ui.text(format!("Size: {}", self.drives.len()));
+                        ui.text(format!("Size: {}", self.drives[0].len()));
                         ui.text(format!("Frequency division: {}", self.stm_freq_div));
                         let sampling_freq = FPGA_CLK_FREQ as f64 / self.stm_freq_div as f64;
                         ui.text(format!("Sampling frequency: {} [Hz]", sampling_freq));
-                        let sampling_period = (1000000 as usize * self.stm_freq_div as usize)
-                            as f64
+                        let sampling_period = (1000000_usize * self.stm_freq_div as usize) as f64
                             / FPGA_CLK_FREQ as f64;
                         ui.text(format!("Sampling period: {} [us]", sampling_period));
                         ui.text(format!(
                             "Period: {} [us]",
-                            sampling_period * self.drives.len() as f64
+                            sampling_period * self.drives[0].len() as f64
                         ));
                         if ui.input_int("Index", &mut self.stm_idx).build() {
-                            if self.stm_idx >= self.drives.len() as _ {
+                            if self.stm_idx >= self.drives[0].len() as _ {
                                 self.stm_idx = 0;
                             }
                             if self.stm_idx < 0 {
-                                self.stm_idx = self.drives.len() as i32 - 1;
+                                self.stm_idx = self.drives[0].len() as i32 - 1;
                             }
                             self.update_drive(self.stm_idx as usize);
 
@@ -858,9 +898,9 @@ impl App {
                     let mut value = self.is_force_fan;
                     ui.checkbox("FORCE FAN", &mut value);
                     let mut value = self.is_stm_mode;
-                    ui.checkbox("SEQ MODE", &mut value);
+                    ui.checkbox("STM MODE", &mut value);
                     let mut value = self.is_gain_stm_mode;
-                    ui.checkbox("SEQ GAIN MODE", &mut value);
+                    ui.checkbox("STM GAIN MODE", &mut value);
                 });
                 TabItem::new("Log").build(ui, || {
                     if ui.radio_button_bool("enable", self.setting.log_enable) {
@@ -1012,7 +1052,7 @@ impl App {
             .zip(self.drives.iter().flat_map(|d| d[idx].1))
             .zip(self.cycles.iter())
             .for_each(|(((drive, duty), phase), cycle)| {
-                drive.amp = duty.duty as f32 * 2.0 / *cycle as f32;
+                drive.amp = (PI * self.static_mod * duty.duty as f32 / *cycle as f32).sin();
                 drive.phase = 2.0 * PI * (*cycle - phase.phase) as f32 / *cycle as f32;
                 drive.set_wave_number(
                     FPGA_CLK_FREQ as f32 / *cycle as f32,
@@ -1064,8 +1104,6 @@ pub fn main() {
     );
 
     let mut app = App::new(setting, &renderer);
-    dbg!("c");
-
     app.reset(&mut renderer);
 
     let (mut imgui, mut platform, mut imgui_renderer) = init_imgui(&renderer);
@@ -1095,7 +1133,7 @@ pub fn main() {
 
             let before_pipeline_future = match renderer.start_frame() {
                 Err(e) => {
-                    eprintln!("{}", e.to_string());
+                    eprintln!("{}", e);
                     return;
                 }
                 Ok(future) => future,
@@ -1127,8 +1165,7 @@ pub fn main() {
                     .chunks_exact(width as _)
                     .rev()
                     .flatten()
-                    .map(|&c| vecmath_util::vec4_map(c, |v| (v * 255.0) as u8))
-                    .flatten()
+                    .flat_map(|&c| vecmath_util::vec4_map(c, |v| (v * 255.0) as u8))
                     .collect();
 
                 if app.save_image {

@@ -1,6 +1,6 @@
 [package]
 name = "acoustic-field-viewer"
-version = "0.7.0"
+version = "2.0.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -20,6 +20,6 @@ serde = { version = "1.0.137", features = ["derive"] }
 vulkano = "0.29.0"
 vulkano-shaders = "0.29.0"
 vulkano-win = "0.29.0"
-winit = "0.26.0"
+winit = "0.26.1"
 vecmath = "1.0.0"
 vecmath-util = {path="../vecmath-util"}
