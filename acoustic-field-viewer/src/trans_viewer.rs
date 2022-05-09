@@ -201,7 +201,7 @@ impl TransViewer {
         )
         .unwrap();
 
-        if let (Some(model), Some(color)) = (&self.color_instance_data, &self.model_instance_data) {
+        if let (Some(model), Some(color)) = (&self.model_instance_data, &self.color_instance_data) {
             builder
                 .bind_pipeline_graphics(self.pipeline.clone())
                 .bind_descriptor_sets(
@@ -237,9 +237,8 @@ impl TransViewer {
                 model: vecmath::col_mat4_mul(m, rotm),
             });
         }
-        let buf = CpuAccessibleBuffer::from_iter(device, BufferUsage::all(), false, data)
-            .expect("failed to create buffer");
-        buf
+        CpuAccessibleBuffer::from_iter(device, BufferUsage::all(), false, data)
+            .expect("failed to create buffer")
     }
 
     fn create_color_instance_data(
@@ -257,8 +256,7 @@ impl TransViewer {
             );
             data.push(ColorInstanceData { color });
         }
-        CpuAccessibleBuffer::from_iter(device, BufferUsage::all(), false, data.iter().cloned())
-            .unwrap()
+        CpuAccessibleBuffer::from_iter(device, BufferUsage::all(), false, data).unwrap()
     }
 
     fn create_vertices(device: Arc<Device>) -> Arc<CpuAccessibleBuffer<[Vertex]>> {

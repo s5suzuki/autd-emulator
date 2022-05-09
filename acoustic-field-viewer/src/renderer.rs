@@ -43,7 +43,6 @@ use winit::{
 use crate::{viewer_settings::ViewerSettings, Matrix4};
 
 pub struct Renderer {
-    _instance: Arc<Instance>,
     device: Arc<Device>,
     surface: Arc<Surface<Window>>,
     queue: Arc<Queue>,
@@ -77,9 +76,9 @@ impl Renderer {
             }
         };
 
-        let _instance = if cfg!(debug_assertions) {
+        let instance = if cfg!(debug_assertions) {
             let instance = Instance::new(InstanceCreateInfo {
-                engine_version: Version::V1_2,
+                engine_version: Version::V1_6,
                 enabled_extensions: instance_extensions,
                 enabled_layers: vec!["VK_LAYER_KHRONOS_validation".to_owned()],
                 ..Default::default()
@@ -130,30 +129,20 @@ impl Renderer {
             instance
         } else {
             Instance::new(InstanceCreateInfo {
-                engine_version: Version::V1_2,
+                engine_version: Version::V1_6,
                 enabled_extensions: instance_extensions,
                 ..Default::default()
             })
             .expect("Failed to create instance")
         };
 
-        let physical_device = PhysicalDevice::enumerate(&_instance)
-            .min_by_key(|p| match p.properties().device_type {
-                PhysicalDeviceType::DiscreteGpu => 0,
-                PhysicalDeviceType::IntegratedGpu => 1,
-                PhysicalDeviceType::VirtualGpu => 2,
-                PhysicalDeviceType::Cpu => 3,
-                PhysicalDeviceType::Other => 4,
-            })
-            .unwrap();
-
         let surface = WindowBuilder::new()
             .with_inner_size(winit::dpi::LogicalSize::new(width, height))
             .with_title(title)
-            .build_vk_surface(event_loop, _instance.clone())
+            .build_vk_surface(event_loop, instance.clone())
             .unwrap();
 
-        let (device, queue) = Self::create_device(physical_device, surface.clone());
+        let (device, queue) = Self::create_device(instance.clone(), surface.clone());
 
         let mut viewport = Viewport {
             origin: [0.0, 0.0],
@@ -162,9 +151,8 @@ impl Renderer {
         };
         let (swap_chain, images) = Self::create_swap_chain(
             surface.clone(),
-            physical_device,
+            device.physical_device(),
             device.clone(),
-            queue.clone(),
             if v_sync {
                 PresentMode::Fifo
             } else {
@@ -206,7 +194,6 @@ impl Renderer {
         camera.set_yaw_pitch(0., -std::f32::consts::PI / 2.0);
 
         Renderer {
-            _instance,
             device,
             surface,
             queue,
@@ -247,25 +234,46 @@ impl Renderer {
     }
 
     fn create_device(
-        physical: PhysicalDevice,
+        instance: Arc<Instance>,
         surface: Arc<Surface<Window>>,
     ) -> (Arc<Device>, Arc<Queue>) {
-        let queue_family = physical
-            .queue_families()
-            .find(|&q| q.supports_graphics())
-            .unwrap();
-
         let device_extensions = DeviceExtensions {
             khr_swapchain: true,
             ..DeviceExtensions::none()
         };
 
+        let (physical_device, queue_family) = PhysicalDevice::enumerate(&instance)
+            .filter(|&p| p.supported_extensions().is_superset_of(&device_extensions))
+            .filter_map(|p| {
+                p.queue_families()
+                    .find(|&q| {
+                        q.supports_graphics() && q.supports_surface(&surface).unwrap_or(false)
+                    })
+                    .map(|q| (p, q))
+            })
+            .min_by_key(|(p, _)| match p.properties().device_type {
+                PhysicalDeviceType::DiscreteGpu => 0,
+                PhysicalDeviceType::IntegratedGpu => 1,
+                PhysicalDeviceType::VirtualGpu => 2,
+                PhysicalDeviceType::Cpu => 3,
+                PhysicalDeviceType::Other => 4,
+            })
+            .unwrap();
+
+        println!(
+            "Using device: {} (type: {:?})",
+            physical_device.properties().device_name,
+            physical_device.properties().device_type,
+        );
+
         let features = Features::none();
         let (device, mut queues) = {
             Device::new(
-                physical,
+                physical_device,
                 DeviceCreateInfo {
-                    enabled_extensions: physical.required_extensions().union(&device_extensions),
+                    enabled_extensions: physical_device
+                        .required_extensions()
+                        .union(&device_extensions),
                     enabled_features: features,
                     queue_create_infos: vec![QueueCreateInfo {
                         queues: vec![0.5],
@@ -283,7 +291,6 @@ impl Renderer {
         surface: Arc<Surface<Window>>,
         physical: PhysicalDevice,
         device: Arc<Device>,
-        queue: Arc<Queue>,
         present_mode: PresentMode,
     ) -> (Arc<Swapchain<Window>>, Vec<Arc<SwapchainImage<Window>>>) {
         let caps = physical

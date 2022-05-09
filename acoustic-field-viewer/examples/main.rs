@@ -463,7 +463,7 @@ impl App {
 
         self.dir_viewer.render(&mut builder);
         self.slice_viewer.render(&mut builder);
-        // self.trans_viewer.render(&mut builder); // FIXME
+        self.trans_viewer.render(&mut builder);
         builder.end_render_pass().unwrap();
         let command_buffer = builder.build().unwrap();
 
