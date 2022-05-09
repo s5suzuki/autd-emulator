@@ -4,7 +4,7 @@
  * Created Date: 11/11/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 17/12/2021
+ * Last Modified: 10/05/2022
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -17,19 +17,19 @@ use camera_controllers::{Camera, CameraPerspective, FirstPerson, FirstPersonSett
 use vulkano::{
     device::{
         physical::{PhysicalDevice, PhysicalDeviceType},
-        Device, DeviceExtensions, Features, Queue,
+        Device, DeviceCreateInfo, DeviceExtensions, Features, Queue, QueueCreateInfo,
     },
     format::Format,
     image::{view::ImageView, AttachmentImage, ImageAccess, ImageUsage, SwapchainImage},
     instance::{
         debug::{DebugCallback, MessageSeverity, MessageType},
-        Instance, InstanceExtensions,
+        Instance, InstanceCreateInfo, InstanceExtensions,
     },
     pipeline::graphics::viewport::Viewport,
-    render_pass::{Framebuffer, RenderPass},
+    render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass},
     swapchain::{
-        self, AcquireError, ColorSpace, FullscreenExclusive, PresentMode, Surface,
-        SurfaceTransform, Swapchain, SwapchainCreationError,
+        self, AcquireError, ColorSpace, FullScreenExclusive, PresentMode, Surface,
+        SurfaceTransform, Swapchain, SwapchainCreateInfo, SwapchainCreationError,
     },
     sync::{self, FlushError, GpuFuture},
     Version,
@@ -43,7 +43,6 @@ use winit::{
 use crate::{viewer_settings::ViewerSettings, Matrix4};
 
 pub struct Renderer {
-    _instance: Arc<Instance>,
     device: Arc<Device>,
     surface: Arc<Surface<Window>>,
     queue: Arc<Queue>,
@@ -77,10 +76,14 @@ impl Renderer {
             }
         };
 
-        let _instance = if cfg!(debug_assertions) {
-            let layers = vec!["VK_LAYER_KHRONOS_validation"];
-            let instance = Instance::new(None, Version::V1_2, &instance_extensions, layers)
-                .expect("Failed to create instance");
+        let instance = if cfg!(debug_assertions) {
+            let instance = Instance::new(InstanceCreateInfo {
+                engine_version: Version::V1_6,
+                enabled_extensions: instance_extensions,
+                enabled_layers: vec!["VK_LAYER_KHRONOS_validation".to_owned()],
+                ..Default::default()
+            })
+            .expect("Failed to create instance");
 
             let severity = MessageSeverity {
                 error: true,
@@ -125,27 +128,21 @@ impl Renderer {
             .ok();
             instance
         } else {
-            Instance::new(None, Version::V1_2, &instance_extensions, None)
-                .expect("Failed to create instance")
-        };
-
-        let physical_device = PhysicalDevice::enumerate(&_instance)
-            .min_by_key(|p| match p.properties().device_type {
-                PhysicalDeviceType::DiscreteGpu => 0,
-                PhysicalDeviceType::IntegratedGpu => 1,
-                PhysicalDeviceType::VirtualGpu => 2,
-                PhysicalDeviceType::Cpu => 3,
-                PhysicalDeviceType::Other => 4,
+            Instance::new(InstanceCreateInfo {
+                engine_version: Version::V1_6,
+                enabled_extensions: instance_extensions,
+                ..Default::default()
             })
-            .unwrap();
+            .expect("Failed to create instance")
+        };
 
         let surface = WindowBuilder::new()
             .with_inner_size(winit::dpi::LogicalSize::new(width, height))
             .with_title(title)
-            .build_vk_surface(event_loop, _instance.clone())
+            .build_vk_surface(event_loop, instance.clone())
             .unwrap();
 
-        let (device, queue) = Self::create_device(physical_device, surface.clone());
+        let (device, queue) = Self::create_device(instance, surface.clone());
 
         let mut viewport = Viewport {
             origin: [0.0, 0.0],
@@ -154,9 +151,8 @@ impl Renderer {
         };
         let (swap_chain, images) = Self::create_swap_chain(
             surface.clone(),
-            physical_device,
+            device.physical_device(),
             device.clone(),
-            queue.clone(),
             if v_sync {
                 PresentMode::Fifo
             } else {
@@ -169,7 +165,7 @@ impl Renderer {
                 color: {
                     load: Clear,
                     store: Store,
-                    format: swap_chain.format(),
+                    format: swap_chain.image_format(),
                     samples: 1,
                 },
                 depth: {
@@ -198,7 +194,6 @@ impl Renderer {
         camera.set_yaw_pitch(0., -std::f32::consts::PI / 2.0);
 
         Renderer {
-            _instance,
             device,
             surface,
             queue,
@@ -239,26 +234,53 @@ impl Renderer {
     }
 
     fn create_device(
-        physical: PhysicalDevice,
+        instance: Arc<Instance>,
         surface: Arc<Surface<Window>>,
     ) -> (Arc<Device>, Arc<Queue>) {
-        let queue_family = physical
-            .queue_families()
-            .find(|&q| q.supports_graphics() && surface.is_supported(q).unwrap_or(false))
-            .unwrap();
-
         let device_extensions = DeviceExtensions {
             khr_swapchain: true,
             ..DeviceExtensions::none()
         };
 
+        let (physical_device, queue_family) = PhysicalDevice::enumerate(&instance)
+            .filter(|&p| p.supported_extensions().is_superset_of(&device_extensions))
+            .filter_map(|p| {
+                p.queue_families()
+                    .find(|&q| {
+                        q.supports_graphics() && q.supports_surface(&surface).unwrap_or(false)
+                    })
+                    .map(|q| (p, q))
+            })
+            .min_by_key(|(p, _)| match p.properties().device_type {
+                PhysicalDeviceType::DiscreteGpu => 0,
+                PhysicalDeviceType::IntegratedGpu => 1,
+                PhysicalDeviceType::VirtualGpu => 2,
+                PhysicalDeviceType::Cpu => 3,
+                PhysicalDeviceType::Other => 4,
+            })
+            .unwrap();
+
+        println!(
+            "Using device: {} (type: {:?})",
+            physical_device.properties().device_name,
+            physical_device.properties().device_type,
+        );
+
         let features = Features::none();
         let (device, mut queues) = {
             Device::new(
-                physical,
-                &features,
-                &physical.required_extensions().union(&device_extensions),
-                [(queue_family, 0.5)].iter().cloned(),
+                physical_device,
+                DeviceCreateInfo {
+                    enabled_extensions: physical_device
+                        .required_extensions()
+                        .union(&device_extensions),
+                    enabled_features: features,
+                    queue_create_infos: vec![QueueCreateInfo {
+                        queues: vec![0.5],
+                        ..QueueCreateInfo::family(queue_family)
+                    }],
+                    ..Default::default()
+                },
             )
             .unwrap()
         };
@@ -269,28 +291,36 @@ impl Renderer {
         surface: Arc<Surface<Window>>,
         physical: PhysicalDevice,
         device: Arc<Device>,
-        queue: Arc<Queue>,
         present_mode: PresentMode,
     ) -> (Arc<Swapchain<Window>>, Vec<Arc<SwapchainImage<Window>>>) {
-        let caps = surface.capabilities(physical).unwrap();
+        let caps = physical
+            .surface_capabilities(&surface, Default::default())
+            .unwrap();
         let alpha = caps.supported_composite_alpha.iter().next().unwrap();
-        let format = caps.supported_formats[0].0;
+        let format = physical
+            .surface_formats(&surface, Default::default())
+            .unwrap()[0]
+            .0;
         let dimensions: [u32; 2] = surface.window().inner_size().into();
-        Swapchain::start(device, surface)
-            .num_images(caps.min_image_count)
-            .format(format)
-            .dimensions(dimensions)
-            .usage(ImageUsage::color_attachment())
-            .sharing_mode(&queue)
-            .composite_alpha(alpha)
-            .transform(SurfaceTransform::Identity)
-            .present_mode(present_mode)
-            .fullscreen_exclusive(FullscreenExclusive::Default)
-            .clipped(true)
-            .color_space(ColorSpace::SrgbNonLinear)
-            .layers(1)
-            .build()
-            .unwrap()
+        Swapchain::new(
+            device,
+            surface,
+            SwapchainCreateInfo {
+                min_image_count: caps.min_image_count,
+                image_format: Some(format),
+                image_color_space: ColorSpace::SrgbNonLinear,
+                image_extent: dimensions,
+                image_array_layers: 1,
+                image_usage: ImageUsage::color_attachment(),
+                pre_transform: SurfaceTransform::Identity,
+                composite_alpha: alpha,
+                present_mode,
+                clipped: true,
+                full_screen_exclusive: FullScreenExclusive::Default,
+                ..Default::default()
+            },
+        )
+        .unwrap()
     }
 
     pub fn device(&self) -> Arc<Device> {
@@ -331,7 +361,7 @@ impl Renderer {
     }
 
     pub fn format(&self) -> Format {
-        self.swap_chain.format()
+        self.swap_chain.image_format()
     }
 
     pub fn resize(&mut self) {
@@ -390,18 +420,24 @@ impl Renderer {
 
     fn recreate_swapchain_and_views(&mut self) {
         let dimensions: [u32; 2] = self.window().inner_size().into();
-        let (new_swapchain, new_images) =
-            match self.swap_chain.recreate().dimensions(dimensions).build() {
-                Ok(r) => r,
-                Err(SwapchainCreationError::UnsupportedDimensions) => {
-                    println!(
-                        "{}",
-                        SwapchainCreationError::UnsupportedDimensions.to_string()
-                    );
-                    return;
-                }
-                Err(e) => panic!("Failed to recreate swapchain: {:?}", e),
-            };
+        let (new_swapchain, new_images) = match self.swap_chain.recreate(SwapchainCreateInfo {
+            image_extent: dimensions,
+            ..self.swap_chain.create_info()
+        }) {
+            Ok(r) => r,
+            Err(SwapchainCreationError::ImageExtentNotSupported {
+                provided,
+                min_supported,
+                max_supported,
+            }) => {
+                println!(
+                    "provided {:?}, min_supported = {:?}, max_supported = {:?}",
+                    provided, min_supported, max_supported
+                );
+                return;
+            }
+            Err(e) => panic!("Failed to recreate swapchain: {:?}", e),
+        };
 
         self.swap_chain = new_swapchain;
         self.frame_buffers = Self::window_size_dependent_setup(
@@ -422,7 +458,7 @@ impl Renderer {
     ) -> Vec<Arc<Framebuffer>> {
         let dimensions = images[0].dimensions().width_height();
 
-        let depth_buffer = ImageView::new(
+        let depth_buffer = ImageView::new_default(
             AttachmentImage::transient(device, dimensions, Format::D16_UNORM).unwrap(),
         )
         .unwrap();
@@ -431,14 +467,15 @@ impl Renderer {
         images
             .iter()
             .map(|image| {
-                let view = ImageView::new(image.clone()).unwrap();
-                Framebuffer::start(render_pass.clone())
-                    .add(view)
-                    .unwrap()
-                    .add(depth_buffer.clone())
-                    .unwrap()
-                    .build()
-                    .unwrap()
+                let view = ImageView::new_default(image.clone()).unwrap();
+                Framebuffer::new(
+                    render_pass.clone(),
+                    FramebufferCreateInfo {
+                        attachments: vec![view, depth_buffer.clone()],
+                        ..Default::default()
+                    },
+                )
+                .unwrap()
             })
             .collect::<Vec<_>>()
     }

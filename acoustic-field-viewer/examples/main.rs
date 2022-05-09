@@ -4,7 +4,7 @@
  * Created Date: 11/11/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 03/12/2021
+ * Last Modified: 10/05/2022
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -23,9 +23,7 @@ use acoustic_field_viewer::{
     trans_viewer::TransViewer,
     Matrix4, UpdateFlag, Vector3, ViewerSettings,
 };
-use autd3_core::hardware_defined::{
-    is_missing_transducer, NUM_TRANS_X, NUM_TRANS_Y, TRANS_SPACING_MM,
-};
+use autd3_core::{is_missing_transducer, NUM_TRANS_X, NUM_TRANS_Y, TRANS_SPACING_MM};
 use imgui::{
     AngleSlider, Context, Drag, FontConfig, FontGlyphRanges, FontSource, Slider, TabBar, TabItem,
     Ui,
@@ -75,7 +73,18 @@ impl App {
                     continue;
                 }
                 let pos = [TRANS_SIZE * x as f32, TRANS_SIZE * y as f32, 0.];
-                sources.add(pos, zdir, Drive::new(1.0, 0.0, 1.0, 1.0));
+                sources.add(
+                    pos,
+                    zdir,
+                    Drive::new(
+                        1.0,
+                        0.0,
+                        1.0,
+                        viewer_settings.frequency,
+                        viewer_settings.sound_speed,
+                    ),
+                    1.0,
+                );
             }
         }
 
@@ -86,16 +95,21 @@ impl App {
             [0., 0., 1.],
         )];
 
+        let field_compute_pipeline = FieldComputePipeline::new(renderer.queue(), &viewer_settings);
+        let slice_viewer = SliceViewer::new(renderer, &viewer_settings);
+        let trans_viewer = TransViewer::new(renderer, &viewer_settings);
+        let dir_viewer = DirectionViewer::new(renderer, &viewer_settings);
+
         Self {
             is_running: true,
             sources,
             axes,
             focal_pos: FOCAL_POS,
             last_frame: Instant::now(),
-            field_compute_pipeline: FieldComputePipeline::new(renderer.queue(), &viewer_settings),
-            slice_viewer: SliceViewer::new(renderer, &viewer_settings),
-            trans_viewer: TransViewer::new(renderer, &viewer_settings),
-            dir_viewer: DirectionViewer::new(renderer, &viewer_settings),
+            field_compute_pipeline,
+            slice_viewer,
+            trans_viewer,
+            dir_viewer,
             viewer_settings,
             view_projection: renderer.get_view_projection(&viewer_settings),
             frame_count: 0,
@@ -110,6 +124,9 @@ impl App {
 
         render.camera.position = self.viewer_settings.camera_pos;
         camera_helper::set_camera_angle(&mut render.camera, self.viewer_settings.camera_angle);
+
+        self.sources.drives_mut().for_each(|d| d.enable = 1.0);
+        self.sources.visibilities_mut().for_each(|d| *d = 1.0);
 
         self.focal_pos = FOCAL_POS;
         Self::calc_focus_phase(self.focal_pos, &mut self.sources, &self.viewer_settings);
@@ -198,16 +215,16 @@ impl App {
 
                     update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
                 }
-                if Drag::new("Wavelength")
+                if Drag::new("Sound speed")
                     .range(0.0, f32::INFINITY)
-                    .build(ui, &mut self.viewer_settings.wave_length)
+                    .build(ui, &mut self.viewer_settings.sound_speed)
                 {
                     Self::calc_focus_phase(
                         self.focal_pos,
                         &mut self.sources,
                         &self.viewer_settings,
                     );
-                    update_flag |= UpdateFlag::UPDATE_WAVENUM;
+                    update_flag |= UpdateFlag::UPDATE_SOURCE_DRIVE;
                 }
 
                 ui.separator();
@@ -372,15 +389,15 @@ impl App {
         });
 
         if ui.small_button("toggle source visible") {
-            for drive in self.sources.drives_mut() {
-                drive.visible = if drive.visible == 0.0 { 1.0 } else { 0.0 };
+            for v in self.sources.visibilities_mut() {
+                *v = 1.0 - *v;
             }
             update_flag |= UpdateFlag::UPDATE_SOURCE_FLAG;
         }
         ui.same_line();
         if ui.small_button("toggle source enable") {
             for drive in self.sources.drives_mut() {
-                drive.enable = if drive.enable == 0.0 { 1.0 } else { 0.0 };
+                drive.enable = 1.0 - drive.enable;
             }
             update_flag |= UpdateFlag::UPDATE_SOURCE_FLAG;
         }
@@ -509,7 +526,7 @@ impl App {
             .draw_commands(
                 &mut cmd_buf_builder,
                 renderer.queue(),
-                ImageView::new(renderer.image()).unwrap(),
+                ImageView::new_default(renderer.image()).unwrap(),
                 draw_data,
             )
             .expect("Rendering failed");
@@ -530,9 +547,10 @@ impl App {
     }
 
     fn calc_focus_phase(focal_pos: Vector3, sources: &mut SoundSources, settings: &ViewerSettings) {
+        let wave_length = settings.sound_speed / settings.frequency;
         for (pos, drive) in sources.positions_drives_mut() {
             let d = vecmath_util::dist(vecmath_util::to_vec3(pos), focal_pos);
-            let p = (d % settings.wave_length) / settings.wave_length;
+            let p = (d % wave_length) / wave_length;
             drive.phase = 2.0 * PI * (1.0 - p);
         }
     }
@@ -578,8 +596,8 @@ fn main() {
     let (mut imgui, mut platform, mut imgui_renderer) = init_imgui(&renderer);
 
     let mut is_running = true;
+    let mut last_frame = Instant::now();
     event_loop.run_return(|event, _, control_flow| {
-        *control_flow = ControlFlow::Wait;
         match &event {
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
@@ -596,15 +614,21 @@ fn main() {
                 platform.handle_event(imgui.io_mut(), renderer.window(), &event);
             }
             Event::MainEventsCleared => {
-                renderer.window().request_redraw();
                 platform
                     .prepare_frame(imgui.io_mut(), renderer.window())
                     .expect("Failed to prepare frame");
+                renderer.window().request_redraw();
+            }
+            Event::NewEvents(_) => {
+                let now = Instant::now();
+                imgui.io_mut().update_delta_time(now - last_frame);
+                last_frame = now;
+                renderer.window().request_redraw();
             }
             Event::RedrawRequested(_) => {
                 let before_pipeline_future = match renderer.start_frame() {
                     Err(e) => {
-                        eprintln!("{}", e.to_string());
+                        eprintln!("{}", e);
                         return;
                     }
                     Ok(future) => future,

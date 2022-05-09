@@ -1,6 +1,6 @@
 [package]
 name = "autd-emulator"
-version = "0.7.0"
+version = "2.0.0"
 authors = ["shun suzuki <suzuki@hapis.k.u-tokyo.ac.jp>"]
 edition = "2021"
 
@@ -8,18 +8,18 @@ edition = "2021"
 
 [dependencies]
 acoustic-field-viewer = {path="../acoustic-field-viewer"}
-autd3-core = "1.10.0"
-autd3-emulator-server = {path="../autd3-emulator-server"}
+autd3-core = "2.0.0"
+autd3-firmware-emulator = "2.0.1"
 camera_controllers = "0.32.0"
 chrono = "0.4.19"
-image = "0.23.14"
-imgui = "0.8.0"
+image = "0.24.2"
+imgui = "0.8.2"
 imgui-vulkano-renderer = {git = "https://github.com/sssssssuzuki/imgui-vulkano-renderer.git"}
-imgui-winit-support = "0.8.0"
+imgui-winit-support = { version = "0.8.2", default-features = false, features = ["winit-26"]}  
 quaternion = "0.4.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 vecmath = "1.0.0"
 vecmath-util = {path="../vecmath-util"}
-vulkano = "0.27.1"
-winit = "0.25.0" #imgui depends winit 0.25
+vulkano = "0.29.0"
+winit = "0.26.1"

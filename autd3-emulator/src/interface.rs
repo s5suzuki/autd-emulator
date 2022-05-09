@@ -1,13 +1,13 @@
 /*
  * File: interface.rs
  * Project: src
- * Created Date: 29/04/2020
+ * Created Date: 09/05/2022
  * Author: Shun Suzuki
  * -----
- * Last Modified: 08/07/2021
+ * Last Modified: 09/05/2022
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
- * Copyright (c) 2020 Hapis Lab. All rights reserved.
+ * Copyright (c) 2022 Hapis Lab. All rights reserved.
  *
  */
 
@@ -60,7 +60,7 @@ impl Interface {
         write_rwlock!(self.is_open, true);
         let is_open = self.is_open.clone();
         let mut buf = [0; BUF_SIZE];
-        let th_handle = thread::spawn(move || loop {
+        self.th_handle = Some(thread::spawn(move || loop {
             if_not_open_or_cannot_read!(is_open, break);
             match socket.recv_from(&mut buf) {
                 Ok((amt, _src)) => {
@@ -69,8 +69,7 @@ impl Interface {
                 }
                 Err(e) => eprintln!("{}", e),
             }
-        });
-        self.th_handle = Some(th_handle);
+        }));
 
         Ok(())
     }

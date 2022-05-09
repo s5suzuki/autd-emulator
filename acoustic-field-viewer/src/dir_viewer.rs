@@ -4,7 +4,7 @@
  * Created Date: 01/12/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 17/12/2021
+ * Last Modified: 10/05/2022
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -13,10 +13,11 @@
 
 use std::sync::Arc;
 
+use bytemuck::{Pod, Zeroable};
 use vulkano::{
     buffer::{BufferUsage, CpuAccessibleBuffer, CpuBufferPool, TypedBufferAccess},
     command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer},
-    descriptor_set::PersistentDescriptorSet,
+    descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet},
     device::Device,
     pipeline::{
         graphics::{
@@ -56,14 +57,21 @@ impl Axis3D {
 }
 
 #[repr(C)]
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Copy, Clone, Zeroable, Pod)]
 struct Vertex {
     position: [f32; 3],
 }
 vulkano::impl_vertex!(Vertex, position);
 
 #[repr(C)]
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Copy, Clone, Zeroable, Pod)]
+struct Data {
+    view: Matrix4,
+    proj: Matrix4,
+}
+
+#[repr(C)]
+#[derive(Default, Debug, Copy, Clone, Zeroable, Pod)]
 struct InstanceData {
     model: Matrix4,
     color: Vector4,
@@ -89,7 +97,7 @@ mod fs {
 pub struct DirectionViewer {
     vertices: Arc<CpuAccessibleBuffer<[Vertex]>>,
     indices: Arc<CpuAccessibleBuffer<[u32]>>,
-    instance_data: Arc<CpuAccessibleBuffer<[InstanceData]>>,
+    instance_data: Option<Arc<CpuAccessibleBuffer<[InstanceData]>>>,
     device: Arc<Device>,
     pipeline: Arc<GraphicsPipeline>,
     view_projection: (Matrix4, Matrix4),
@@ -101,7 +109,6 @@ impl DirectionViewer {
         let vertices = Self::create_vertices(device.clone());
         let indices = Self::create_indices(device.clone());
         let _empty = SoundSources::new();
-        let instance_data = Self::create_instance_data(renderer.device(), settings, &[]);
 
         let vs = vs::load(device.clone()).unwrap();
         let fs = fs::load(device.clone()).unwrap();
@@ -126,7 +133,7 @@ impl DirectionViewer {
         Self {
             vertices,
             indices,
-            instance_data,
+            instance_data: None,
             device,
             pipeline,
             view_projection: renderer.get_view_projection(settings),
@@ -141,11 +148,16 @@ impl DirectionViewer {
         axis: &[Axis3D],
         update_flag: UpdateFlag,
     ) {
-        if update_flag.contains(UpdateFlag::INIT_AXIS)
-            || update_flag.contains(UpdateFlag::UPDATE_AXIS_SIZE)
-            || update_flag.contains(UpdateFlag::UPDATE_AXIS_FLAG)
+        if !axis.is_empty()
+            && (update_flag.contains(UpdateFlag::INIT_AXIS)
+                || update_flag.contains(UpdateFlag::UPDATE_AXIS_SIZE)
+                || update_flag.contains(UpdateFlag::UPDATE_AXIS_FLAG))
         {
-            self.instance_data = Self::create_instance_data(renderer.device(), settings, axis);
+            self.instance_data = Some(Self::create_instance_data(
+                renderer.device(),
+                settings,
+                axis,
+            ));
         }
 
         if update_flag.contains(UpdateFlag::UPDATE_CAMERA_POS) {
@@ -154,45 +166,38 @@ impl DirectionViewer {
     }
 
     pub fn render(&mut self, builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>) {
-        let layout = self
-            .pipeline
-            .layout()
-            .descriptor_set_layouts()
-            .get(0)
-            .unwrap();
+        let layout = self.pipeline.layout().set_layouts().get(0).unwrap();
         let world_view_proj_buf =
-            CpuBufferPool::<vs::ty::Data>::new(self.device.clone(), BufferUsage::all());
+            CpuBufferPool::<Data>::new(self.device.clone(), BufferUsage::all());
         let uniform_buffer_subbuffer = {
-            let uniform_data = vs::ty::Data {
+            let uniform_data = Data {
                 view: self.view_projection.0,
                 proj: self.view_projection.1,
             };
             world_view_proj_buf.next(uniform_data).unwrap()
         };
-        let mut set_builder = PersistentDescriptorSet::start(layout.clone());
-        set_builder
-            .add_buffer(Arc::new(uniform_buffer_subbuffer))
-            .unwrap();
-        let desc_set = set_builder.build().unwrap();
+        let desc_set = PersistentDescriptorSet::new(
+            layout.clone(),
+            [WriteDescriptorSet::buffer(0, uniform_buffer_subbuffer)],
+        )
+        .unwrap();
 
-        builder
-            .bind_pipeline_graphics(self.pipeline.clone())
-            .bind_descriptor_sets(
-                PipelineBindPoint::Graphics,
-                self.pipeline.layout().clone(),
-                0,
-                desc_set,
-            )
-            .bind_vertex_buffers(0, (self.vertices.clone(), self.instance_data.clone()))
-            .bind_index_buffer(self.indices.clone())
-            .draw_indexed(
-                self.indices.len() as u32,
-                self.instance_data.len() as u32,
-                0,
-                0,
-                0,
-            )
-            .unwrap();
+        if let Some(instance) = &self.instance_data {
+            builder
+                .bind_pipeline_graphics(self.pipeline.clone())
+                .bind_descriptor_sets(
+                    PipelineBindPoint::Graphics,
+                    self.pipeline.layout().clone(),
+                    0,
+                    desc_set,
+                )
+                .bind_vertex_buffers(0, (self.vertices.clone(), instance.clone()))
+                .bind_index_buffer(self.indices.clone())
+                .draw_indexed(self.indices.len() as u32, instance.len() as u32, 0, 0, 0)
+                .unwrap();
+        } else {
+            // TODO
+        }
     }
 
     fn create_instance_data(
