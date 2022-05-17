@@ -4,7 +4,7 @@
  * Created Date: 06/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 10/05/2022
+ * Last Modified: 17/05/2022
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -392,7 +392,9 @@ impl App {
                 self.silencer_step = emulator.cpu(0).fpga().silencer_step();
                 self.point_stm_sound_speed = emulator.cpu(0).fpga().sound_speed();
 
-                if flag.contains(CPUControlFlags::DO_SYNC) {
+                if !flag.contains(CPUControlFlags::CONFIG_EN_N)
+                    && flag.contains(CPUControlFlags::CONFIG_SYNC)
+                {
                     self.cycles = emulator
                         .cpus()
                         .iter()
@@ -906,6 +908,9 @@ impl App {
                     if ui.radio_button_bool("enable", self.setting.log_enable) {
                         self.setting.log_enable = !self.setting.log_enable;
                     }
+                    if ui.small_button("clear") {
+                        self.log_clear();
+                    }
                     if self.setting.log_enable {
                         Slider::new("Max", 0, 1000).build(ui, &mut self.setting.log_max);
 
@@ -1036,6 +1041,10 @@ impl App {
         }
     }
 
+    fn log_clear(&mut self) {
+        self.log_buf.clear();
+    }
+
     fn get_log_txt(&self) -> String {
         let mut log = String::new();
         for line in &self.log_buf {
@@ -1111,82 +1120,96 @@ pub fn main() {
     let mut autd_server = AUTDServer::new(&format!("127.0.0.1:{}", app.setting.port)).unwrap();
 
     let mut is_running = true;
+    let mut last_frame = Instant::now();
     while is_running {
-        event_loop.run_return(|event, _, control_flow| {
-            *control_flow = ControlFlow::Exit;
-            platform.handle_event(imgui.io_mut(), renderer.window(), &event);
-            match &event {
-                Event::WindowEvent {
-                    event: WindowEvent::CloseRequested,
-                    ..
-                } => {
-                    is_running = false;
-                }
-                Event::WindowEvent {
-                    event: WindowEvent::Resized(..) | WindowEvent::ScaleFactorChanged { .. },
-                    ..
-                } => {
-                    renderer.resize();
-                }
-                _ => (),
+        event_loop.run_return(|event, _, control_flow| match &event {
+            Event::WindowEvent {
+                event: WindowEvent::CloseRequested,
+                ..
+            } => {
+                is_running = false;
+                *control_flow = ControlFlow::Exit;
             }
+            Event::WindowEvent {
+                event: WindowEvent::Resized(..) | WindowEvent::ScaleFactorChanged { .. },
+                ..
+            } => {
+                renderer.resize();
+                platform.handle_event(imgui.io_mut(), renderer.window(), &event);
+            }
+            Event::MainEventsCleared => {
+                platform
+                    .prepare_frame(imgui.io_mut(), renderer.window())
+                    .expect("Failed to prepare frame");
+                renderer.window().request_redraw();
+            }
+            Event::NewEvents(_) => {
+                let now = Instant::now();
+                imgui.io_mut().update_delta_time(now - last_frame);
+                last_frame = now;
+                renderer.window().request_redraw();
+            }
+            Event::RedrawRequested(_) => {
+                let before_pipeline_future = match renderer.start_frame() {
+                    Err(e) => {
+                        eprintln!("{}", e);
+                        return;
+                    }
+                    Ok(future) => future,
+                };
+                let after_future = app.render(
+                    &mut renderer,
+                    &mut imgui,
+                    &mut platform,
+                    &mut imgui_renderer,
+                    &mut autd_server,
+                    before_pipeline_future,
+                );
+                renderer.finish_frame(after_future);
 
-            let before_pipeline_future = match renderer.start_frame() {
-                Err(e) => {
-                    eprintln!("{}", e);
-                    return;
+                if app.save_image || app.recording {
+                    let image = app.slice_viewer.field_image_view();
+                    let result = image.read().unwrap();
+
+                    use image::codecs::png::PngEncoder;
+                    use image::ColorType;
+                    use image::ImageEncoder;
+                    use std::fs::File;
+
+                    let width = app.setting.viewer_setting.slice_width
+                        / app.setting.viewer_setting.slice_pixel_size;
+                    let height = app.setting.viewer_setting.slice_height
+                        / app.setting.viewer_setting.slice_pixel_size;
+                    let pixels: Vec<_> = (&result[0..(width as usize * height as usize)])
+                        .chunks_exact(width as _)
+                        .rev()
+                        .flatten()
+                        .flat_map(|&c| vecmath_util::vec4_map(c, |v| (v * 255.0) as u8))
+                        .collect();
+
+                    if app.save_image {
+                        let output = File::create(&app.setting.save_file_path).unwrap();
+                        let encoder = PngEncoder::new(output);
+                        encoder
+                            .write_image(&pixels, width, height, ColorType::Rgba8)
+                            .unwrap();
+                    }
+
+                    if app.recording {
+                        std::fs::create_dir_all(&app.setting.record_path).unwrap();
+                        let date = chrono::Local::now();
+                        let path = Path::new(&app.setting.record_path)
+                            .join(format!("{}", date.format("%Y-%m-%d_%H-%M-%S_%3f.png")));
+                        let output = File::create(path).unwrap();
+                        let encoder = PngEncoder::new(output);
+                        encoder
+                            .write_image(&pixels, width, height, ColorType::Rgba8)
+                            .unwrap();
+                    }
                 }
-                Ok(future) => future,
-            };
-            let after_future = app.render(
-                &mut renderer,
-                &mut imgui,
-                &mut platform,
-                &mut imgui_renderer,
-                &mut autd_server,
-                before_pipeline_future,
-            );
-            renderer.finish_frame(after_future);
-
-            if app.save_image || app.recording {
-                let image = app.slice_viewer.field_image_view();
-                let result = image.read().unwrap();
-
-                use image::codecs::png::PngEncoder;
-                use image::ColorType;
-                use image::ImageEncoder;
-                use std::fs::File;
-
-                let width = app.setting.viewer_setting.slice_width
-                    / app.setting.viewer_setting.slice_pixel_size;
-                let height = app.setting.viewer_setting.slice_height
-                    / app.setting.viewer_setting.slice_pixel_size;
-                let pixels: Vec<_> = (&result[0..(width as usize * height as usize)])
-                    .chunks_exact(width as _)
-                    .rev()
-                    .flatten()
-                    .flat_map(|&c| vecmath_util::vec4_map(c, |v| (v * 255.0) as u8))
-                    .collect();
-
-                if app.save_image {
-                    let output = File::create(&app.setting.save_file_path).unwrap();
-                    let encoder = PngEncoder::new(output);
-                    encoder
-                        .write_image(&pixels, width, height, ColorType::Rgba8)
-                        .unwrap();
-                }
-
-                if app.recording {
-                    std::fs::create_dir_all(&app.setting.record_path).unwrap();
-                    let date = chrono::Local::now();
-                    let path = Path::new(&app.setting.record_path)
-                        .join(format!("{}", date.format("%Y-%m-%d_%H-%M-%S_%3f.png")));
-                    let output = File::create(path).unwrap();
-                    let encoder = PngEncoder::new(output);
-                    encoder
-                        .write_image(&pixels, width, height, ColorType::Rgba8)
-                        .unwrap();
-                }
+            }
+            event => {
+                platform.handle_event(imgui.io_mut(), renderer.window(), event);
             }
         });
     }

@@ -4,7 +4,7 @@
  * Created Date: 26/11/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 09/05/2022
+ * Last Modified: 17/05/2022
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -76,7 +76,7 @@ impl Default for ViewerSettings {
             near_clip: 0.1,
             far_clip: 1000.,
             background: [0.3, 0.3, 0.3, 0.0],
-            vsync: false,
+            vsync: true,
         }
     }
 }
