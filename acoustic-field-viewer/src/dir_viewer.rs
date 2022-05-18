@@ -4,7 +4,7 @@
  * Created Date: 01/12/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 10/05/2022
+ * Last Modified: 18/05/2022
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -210,10 +210,13 @@ impl DirectionViewer {
         let mut colors = Vec::with_capacity(len * 3);
         for a in axis.iter() {
             let mut model = vecmath_util::mat4_t(a.pos);
-            model = vecmath::col_mat4_mul(
-                model,
-                vecmath_util::mat4_rot(vecmath_util::quaternion_to(a.z, [0., 0., 1.])),
-            );
+            let rot = [
+                vecmath_util::to_vec4(a.x),
+                vecmath_util::to_vec4(a.y),
+                vecmath_util::to_vec4(a.z),
+                [0., 0., 0., 1.0],
+            ];
+            model = vecmath::col_mat4_mul(model, rot);
             models.push(model);
             models.push(model);
             models.push(model);
