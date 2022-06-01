@@ -4,7 +4,7 @@ version = 3
 
 [[package]]
 name = "acoustic-field-viewer"
-version = "2.0.1"
+version = "2.1.0"
 dependencies = [
  "autd3-core",
  "bitflags",
@@ -72,7 +72,7 @@ dependencies = [
 
 [[package]]
 name = "autd-emulator"
-version = "2.0.1"
+version = "2.1.0"
 dependencies = [
  "acoustic-field-viewer",
  "autd3-core",
@@ -94,9 +94,9 @@ dependencies = [
 
 [[package]]
 name = "autd3-core"
-version = "2.0.2"
+version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c388fe774ac8cdeeb42ee7a57e3a245c83310dae3eed127d63167c11eeee99c"
+checksum = "b7431eba4d7a32d93f51059d08fc821b052ef3599c194e0777d75976626974ba"
 dependencies = [
  "anyhow",
  "autd3-driver",
@@ -108,9 +108,9 @@ dependencies = [
 
 [[package]]
 name = "autd3-driver"
-version = "2.0.2"
+version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bb70fcb0e432f00ca2385be074a21bcbe11b85739b636c77779ecd6639622b2c"
+checksum = "ae8493884d7383df446a3bf192cdd9d4cf19cc2d3da5fd04eef5cfb1245d25ff"
 dependencies = [
  "anyhow",
  "bitflags",
@@ -119,9 +119,9 @@ dependencies = [
 
 [[package]]
 name = "autd3-firmware-emulator"
-version = "2.0.3"
+version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d9bf838847c85616c3a94a3f4e04c940976486dc8e19376866bc9b6e3c11127"
+checksum = "ed2081eb4fd25b8d06fe3960795a4d24cfbef17020469f4fde695a697abbf211"
 dependencies = [
  "autd3-driver",
  "num-integer",
