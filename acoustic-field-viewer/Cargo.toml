@@ -1,25 +1,25 @@
 [package]
 name = "acoustic-field-viewer"
-version = "2.2.0"
+version = "2.3.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-autd3-core = "2.2.0"
+autd3-core = "2.3.0"
 bitflags = "1.3.2"
 bytemuck = { version = "1.7", features = ["derive", "extern_crate_std", "min_const_generics"] }
 camera_controllers = "0.32.0"
 imgui = "0.8.2"
-imgui-vulkano-renderer = {git = "https://github.com/sssssssuzuki/imgui-vulkano-renderer.git"}
+imgui-vulkano-renderer = {git = "https://github.com/sssssssuzuki/imgui-vulkano-renderer.git", branch = "vulkano0.30.0"}
 imgui-winit-support = { version = "0.8.2", default-features = false, features = ["winit-26"]}  
 png = "0.17.5"
 quaternion = "0.4.1"
 scarlet = "1.1.0"
 serde = { version = "1.0.137", features = ["derive"] }
-vulkano = "0.29.0"
-vulkano-shaders = "0.29.0"
-vulkano-win = "0.29.0"
+vulkano = "0.30.0"
+vulkano-shaders = "0.30.0"
+vulkano-win = "0.30.0"
 winit = "0.26.1"
 vecmath = "1.0.0"
 vecmath-util = {path="../vecmath-util"}
