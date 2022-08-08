@@ -4,12 +4,17 @@
  * Created Date: 06/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 17/05/2022
+ * Last Modified: 08/08/2022
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
  *
  */
+
+#![cfg_attr(
+    all(not(debug_assertions), target_os = "windows"),
+    windows_subsystem = "windows"
+)]
 
 mod interface;
 mod server;
@@ -33,7 +38,9 @@ use imgui::*;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use server::{AUTDEvent, AUTDServer};
 use vulkano::{
-    command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, SubpassContents},
+    command_buffer::{
+        AutoCommandBufferBuilder, CommandBufferUsage, RenderPassBeginInfo, SubpassContents,
+    },
     image::view::ImageView,
     sync::GpuFuture,
 };
@@ -140,9 +147,18 @@ impl App {
         )
         .unwrap();
 
-        let clear_values = vec![self.setting.viewer_setting.background.into(), 1f32.into()];
+        let clear_values = vec![
+            Some(self.setting.viewer_setting.background.into()),
+            Some(1f32.into()),
+        ];
         builder
-            .begin_render_pass(framebuffer, SubpassContents::Inline, clear_values)
+            .begin_render_pass(
+                RenderPassBeginInfo {
+                    clear_values,
+                    ..RenderPassBeginInfo::framebuffer(framebuffer)
+                },
+                SubpassContents::Inline,
+            )
             .unwrap()
             .set_viewport(0, [renderer.viewport()]);
 

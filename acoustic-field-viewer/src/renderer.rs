@@ -4,7 +4,7 @@
  * Created Date: 11/11/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 10/05/2022
+ * Last Modified: 08/08/2022
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -22,7 +22,10 @@ use vulkano::{
     format::Format,
     image::{view::ImageView, AttachmentImage, ImageAccess, ImageUsage, SwapchainImage},
     instance::{
-        debug::{DebugCallback, MessageSeverity, MessageType},
+        debug::{
+            DebugUtilsMessageSeverity, DebugUtilsMessageType, DebugUtilsMessenger,
+            DebugUtilsMessengerCreateInfo,
+        },
         Instance, InstanceCreateInfo, InstanceExtensions,
     },
     pipeline::graphics::viewport::Viewport,
@@ -85,47 +88,52 @@ impl Renderer {
             })
             .expect("Failed to create instance");
 
-            let severity = MessageSeverity {
-                error: true,
-                warning: true,
-                information: true,
-                verbose: true,
+            let _debug_callback = unsafe {
+                DebugUtilsMessenger::new(
+                    instance.clone(),
+                    DebugUtilsMessengerCreateInfo {
+                        message_severity: DebugUtilsMessageSeverity {
+                            error: true,
+                            warning: true,
+                            information: true,
+                            verbose: true,
+                        },
+                        message_type: DebugUtilsMessageType::all(),
+                        ..DebugUtilsMessengerCreateInfo::user_callback(Arc::new(|msg| {
+                            let severity = if msg.severity.error {
+                                "error"
+                            } else if msg.severity.warning {
+                                "warning"
+                            } else if msg.severity.information {
+                                "information"
+                            } else if msg.severity.verbose {
+                                "verbose"
+                            } else {
+                                panic!("no-impl");
+                            };
+
+                            let ty = if msg.ty.general {
+                                "general"
+                            } else if msg.ty.validation {
+                                "validation"
+                            } else if msg.ty.performance {
+                                "performance"
+                            } else {
+                                panic!("no-impl");
+                            };
+
+                            println!(
+                                "{} {} {}: {}",
+                                msg.layer_prefix.unwrap_or("unknown"),
+                                ty,
+                                severity,
+                                msg.description
+                            );
+                        }))
+                    },
+                )
+                .ok()
             };
-
-            let ty = MessageType::all();
-
-            let _debug_callback = DebugCallback::new(&instance, severity, ty, |msg| {
-                let severity = if msg.severity.error {
-                    "error"
-                } else if msg.severity.warning {
-                    "warning"
-                } else if msg.severity.information {
-                    "information"
-                } else if msg.severity.verbose {
-                    "verbose"
-                } else {
-                    panic!("no-impl");
-                };
-
-                let ty = if msg.ty.general {
-                    "general"
-                } else if msg.ty.validation {
-                    "validation"
-                } else if msg.ty.performance {
-                    "performance"
-                } else {
-                    panic!("no-impl");
-                };
-
-                println!(
-                    "{} {} {}: {}",
-                    msg.layer_prefix.unwrap_or("unknown"),
-                    ty,
-                    severity,
-                    msg.description
-                );
-            })
-            .ok();
             instance
         } else {
             Instance::new(InstanceCreateInfo {
@@ -271,9 +279,7 @@ impl Renderer {
             Device::new(
                 physical_device,
                 DeviceCreateInfo {
-                    enabled_extensions: physical_device
-                        .required_extensions()
-                        .union(&device_extensions),
+                    enabled_extensions: device_extensions,
                     enabled_features: features,
                     queue_create_infos: vec![QueueCreateInfo {
                         queues: vec![0.5],

@@ -4,7 +4,7 @@
  * Created Date: 11/11/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 10/05/2022
+ * Last Modified: 08/08/2022
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -30,7 +30,9 @@ use imgui::{
 };
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use vulkano::{
-    command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, SubpassContents},
+    command_buffer::{
+        AutoCommandBufferBuilder, CommandBufferUsage, RenderPassBeginInfo, SubpassContents,
+    },
     image::view::ImageView,
     sync::GpuFuture,
 };
@@ -469,9 +471,15 @@ impl App {
         )
         .unwrap();
 
-        let clear_values = vec![[0.3, 0.3, 0.3, 1.0].into(), 1f32.into()];
+        let clear_values = vec![Some([0.3, 0.3, 0.3, 1.0].into()), Some(1f32.into())];
         builder
-            .begin_render_pass(framebuffer, SubpassContents::Inline, clear_values)
+            .begin_render_pass(
+                RenderPassBeginInfo {
+                    clear_values,
+                    ..RenderPassBeginInfo::framebuffer(framebuffer)
+                },
+                SubpassContents::Inline,
+            )
             .unwrap()
             .set_viewport(0, [renderer.viewport()]);
 
