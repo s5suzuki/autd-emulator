@@ -1,6 +1,6 @@
 # Emulator for [autd3](https://github.com/shinolab/autd3)
 
-* version 2.3.0
+* version 2.3.1
     * supported autd3 library version is >= 2.3.0
 
 # Build & Run

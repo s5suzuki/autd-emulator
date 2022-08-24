@@ -52,7 +52,7 @@ jobs:
           copy assets assets_ -r
           rmdir assets/fonts -r
           rmdir assets/shaders -r
-          Compress-Archive -Path LICENSE, NOTICE, README.md, assets, target/release/autd-emulator.exe -DestinationPath assets_x64.zip
+          Compress-Archive -Path LICENSE, NOTICE, README.md, assets, setting.json, target/release/autd-emulator.exe -DestinationPath assets_x64.zip
           rmdir assets -r
           copy assets_ assets -r
           rmdir assets_ -r

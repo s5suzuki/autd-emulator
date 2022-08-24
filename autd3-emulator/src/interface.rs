@@ -4,13 +4,14 @@
  * Created Date: 09/05/2022
  * Author: Shun Suzuki
  * -----
- * Last Modified: 09/05/2022
+ * Last Modified: 24/08/2022
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2022 Hapis Lab. All rights reserved.
  *
  */
 
+use anyhow::Result;
 use std::{
     net::UdpSocket,
     sync::{mpsc::Sender, Arc, RwLock},
@@ -45,7 +46,7 @@ pub struct Interface {
 }
 
 impl Interface {
-    pub fn open(addr: &str) -> Result<Interface, std::io::Error> {
+    pub fn open(addr: &str) -> Result<Interface> {
         let socket = UdpSocket::bind(addr)?;
         Ok(Interface {
             is_open: Arc::new(RwLock::new(false)),
@@ -55,7 +56,7 @@ impl Interface {
         })
     }
 
-    pub fn start(&mut self, tx: Sender<Vec<u8>>) -> Result<(), std::io::Error> {
+    pub fn start(&mut self, tx: Sender<Vec<u8>>) -> Result<()> {
         let socket = self.socket.try_clone()?;
         write_rwlock!(self.is_open, true);
         let is_open = self.is_open.clone();
@@ -74,16 +75,17 @@ impl Interface {
         Ok(())
     }
 
-    pub fn close(&mut self) {
-        if_not_open_or_cannot_read!(self.is_open, return);
+    pub fn close(&mut self) -> Result<()> {
+        if_not_open_or_cannot_read!(self.is_open, return Ok(()));
         write_rwlock!(self.is_open, false);
 
-        let socket = UdpSocket::bind("127.0.0.1:8080").unwrap();
-        socket.send_to(&[0x00], &self.addr).unwrap();
+        let socket = UdpSocket::bind("127.0.0.1:8080")?;
+        socket.send_to(&[0x00], &self.addr)?;
 
         if let Some(handle) = self.th_handle.take() {
             handle.join().unwrap();
             self.th_handle = None;
         }
+        Ok(())
     }
 }

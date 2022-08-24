@@ -4,12 +4,14 @@
  * Created Date: 09/05/2022
  * Author: Shun Suzuki
  * -----
- * Last Modified: 10/05/2022
+ * Last Modified: 24/08/2022
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2022 Hapis Lab. All rights reserved.
  *
  */
+
+use anyhow::Result;
 
 use std::sync::mpsc::{self, Receiver};
 
@@ -67,7 +69,7 @@ pub struct AUTDServer {
 }
 
 impl AUTDServer {
-    pub fn new(addr: &str) -> Result<Self, std::io::Error> {
+    pub fn new(addr: &str) -> Result<Self> {
         let (tx, rx) = mpsc::channel();
         let mut interface = Interface::open(addr)?;
         interface.start(tx)?;
@@ -75,13 +77,13 @@ impl AUTDServer {
         Ok(Self {
             _interface: interface,
             rx,
-            emulator: Emulator::new(0),
+            emulator: Emulator::new(),
             tx_buf: TxDatagram::new(0),
         })
     }
 
     fn set_device_num(&mut self, n: usize) {
-        self.emulator = Emulator::new(n);
+        self.emulator.init(n);
         self.tx_buf = TxDatagram::new(n);
     }
 
@@ -154,7 +156,7 @@ impl AUTDServer {
         }
     }
 
-    pub fn close(&mut self) {
+    pub fn close(&mut self) -> Result<()> {
         self._interface.close()
     }
 }

@@ -4,7 +4,7 @@
  * Created Date: 06/07/2021
  * Author: Shun Suzuki
  * -----
- * Last Modified: 08/08/2022
+ * Last Modified: 24/08/2022
  * Modified By: Shun Suzuki (suzuki@hapis.k.u-tokyo.ac.jp)
  * -----
  * Copyright (c) 2021 Hapis Lab. All rights reserved.
@@ -19,6 +19,8 @@
 mod interface;
 mod server;
 mod settings;
+
+use anyhow::Result;
 
 use std::{collections::VecDeque, f32::consts::PI, path::Path, time::Instant};
 
@@ -1116,7 +1118,8 @@ fn init_imgui(renderer: &Renderer) -> (Context, WinitPlatform, imgui_vulkano_ren
     .expect("Failed to initialize renderer");
     (imgui, platform, renderer)
 }
-pub fn main() {
+
+pub fn main() -> Result<()> {
     let setting = Setting::load("setting.json");
 
     let mut event_loop = EventLoop::new();
@@ -1133,7 +1136,7 @@ pub fn main() {
 
     let (mut imgui, mut platform, mut imgui_renderer) = init_imgui(&renderer);
 
-    let mut autd_server = AUTDServer::new(&format!("127.0.0.1:{}", app.setting.port)).unwrap();
+    let mut autd_server = AUTDServer::new(&format!("127.0.0.1:{}", app.setting.port))?;
 
     let mut is_running = true;
     let mut last_frame = Instant::now();
@@ -1230,8 +1233,10 @@ pub fn main() {
         });
     }
 
-    autd_server.close();
+    autd_server.close()?;
 
     app.setting.merge_render_sys(&renderer);
     app.setting.save("setting.json");
+
+    Ok(())
 }
